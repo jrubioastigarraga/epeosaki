@@ -11,6 +11,8 @@ Además, la aplicación se conecta a **Supabase** para tener:
 - Registro e inicio de sesión con email y contraseña.
 - Usuarios **normales** y usuarios **administradores**.
 - **Confirmación de respuestas** por parte de los usuarios (y aviso de discrepancias).
+- **Intentos agrupados**: cada intento guarda las preguntas que hayas respondido, aunque no completes todas. Puedes revisar cualquier intento pasado desde el selector de la barra lateral.
+- **Ranking de preguntas más falladas**: global (todos los usuarios) o solo tus fallos.
 - Panel de administración para gestionar roles y revisar/eliminar confirmaciones.
 - Sincronización del progreso entre dispositivos (si se inicia sesión).
 
@@ -31,10 +33,13 @@ Además, la aplicación se conecta a **Supabase** para tener:
 4. Debe terminar sin errores. Se crean:
    - `profiles`: perfil y rol (`user` / `admin`) de cada usuario.
    - `confirmations`: confirmaciones y discrepancias de respuestas.
-   - `attempts`: progreso de cada usuario.
-   - funciones `is_admin()`, `question_confirmation_stats()`, trigger de alta de perfil y políticas RLS.
+   - `attempt_groups`: cada intento (puede quedar incompleto).
+   - `attempts`: respuestas de cada intento.
+   - funciones `is_admin()`, `question_confirmation_stats()`, `question_failure_stats()`, triggers y políticas RLS.
 
 > En este repositorio ya está ejecutado sobre el proyecto `ope_ana` (`idydmepueznvspefottp`).
+
+> Si actualizas desde la versión anterior (una sola fila por pregunta en `attempts`), ejecuta también [`sql/migrate_attempt_groups.sql`](sql/migrate_attempt_groups.sql). En `ope_ana` ya está aplicada.
 
 ### 1.3 Copiar las claves
 
@@ -106,13 +111,42 @@ El progreso (preguntas respondidas) se guarda en `localStorage` y, si hay sesió
 
 ---
 
-## 3. Modo local (sin Supabase)
+## 3. Intentos y preguntas más falladas
+
+### Intentos
+
+Cada vez que respondes una pregunta sin tener un intento activo, la app crea un **intento** automáticamente. Puedes empezar uno nuevo con el botón **+ Nuevo** de la barra lateral o con el icono ↻ de la cabecera.
+
+- Un intento **no tiene que completarse**: se guardan las preguntas que respondas y puedes dejarlo a medias.
+- El selector **Intento** de la barra lateral permite elegir el intento actual o cualquier intento anterior.
+- Al elegir un intento anterior entras en **modo revisión**: solo se muestran las preguntas respondidas en ese intento, con tu respuesta, la correcta y la explicación.
+- En revisión no se pueden cambiar las respuestas. El botón **Salir de la revisión** vuelve al intento actual.
+- **Borrar intentos** elimina todos los intentos de la batería actual (no solo el actual).
+- Cada intento guarda su propia copia de las respuestas, por lo que puedes responder la misma pregunta en intentos distintos.
+
+Los intentos se guardan en `attempt_groups` y sus respuestas en `attempts`. Si no hay sesión, se guardan en `localStorage`; al iniciar sesión se sincronizan con Supabase.
+
+### Preguntas más falladas
+
+El botón **Preguntas más falladas** abre un ranking con:
+
+- **Global**: todas las respuestas de todos los usuarios (función `question_failure_stats()`).
+- **Mis fallos**: agregado de todos tus intentos.
+- Filtro por batería (Todas / Común / FEM).
+- Número de fallos, número de intentos y porcentaje de fallo.
+- Al pulsar una fila se abre esa pregunta.
+
+El ranking global solo expone datos agregados; no muestra qué usuario falló cada pregunta.
+
+---
+
+## 4. Modo local (sin Supabase)
 
 Si `config.js` conserva los valores de ejemplo, la web funciona igual que antes: guarda el progreso en el navegador y muestra un aviso de **Modo local**. No aparecen usuarios ni confirmaciones.
 
 ---
 
-## 4. Publicar en GitHub Pages
+## 5. Publicar en GitHub Pages
 
 Sube al repositorio, además de `index.html`:
 
@@ -128,20 +162,22 @@ GitHub Pages sirve el contenido de la rama configurada (normalmente `main` / ra�
 
 ---
 
-## 5. Estructura
+## 6. Estructura
 
 ```
 index.html              aplicación + dataset de las 700 preguntas
 app.js                  lógica de la aplicación (casos, usuarios, confirmaciones)
 config.js               URL y clave anon de Supabase
+favicon.svg             icono del sitio
 vendor/supabase.js      cliente oficial de Supabase (UMD, servido en local)
 sql/schema.sql          tablas, funciones, triggers y políticas RLS
+sql/migrate_attempt_groups.sql  migración de progreso antiguo a intentos
 bibliografia/           leyes, guías y manuales (lectores + PDF)
 ```
 
 ---
 
-## 6. Notas
+## 7. Notas
 
 - Las respuestas del dataset son deducidas y no son una plantilla oficial. El campo `confidence` muestra la seguridad con la que se propuso cada respuesta; las confirmaciones de usuarios son independientes de ese valor.
 - La agrupación de casos clínicos usa el campo `caso` del dataset y muestra solo el enunciado del caso, sin repetir dentro las preguntas y opciones.

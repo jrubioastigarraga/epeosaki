@@ -206,6 +206,29 @@ kbd{background:#eef2f8;border:1px solid #d9e1ee;border-bottom-width:2px;border-r
 .case-sub .qhead{margin-bottom:10px}
 .case-sub .question{font-size:16.5px}
 
+/* ---------- intentos ---------- */
+.attempt-bar{display:flex;gap:6px;align-items:center;margin-top:9px}
+.attempt-bar label{flex:1;min-width:0;display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+.attempt-bar select{flex:1;min-width:0;text-transform:none;letter-spacing:normal;font-weight:500}
+.attempt-bar .btn{padding:6px 9px;font-size:11.5px;white-space:nowrap}
+.review-banner{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:var(--accent-soft);border:1px solid #c9d6f4;border-radius:10px;padding:10px 14px;margin-bottom:18px;font-size:12.5px;color:#33415c}
+.review-banner b{color:var(--accent)}
+.review-banner .btn{padding:6px 10px;font-size:12px}
+
+/* ---------- ranking de fallos ---------- */
+.fail-list{display:grid;gap:7px}
+.fail-row{display:flex;gap:10px;align-items:center;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer;text-align:left;width:100%;color:var(--ink)}
+.fail-row:hover{background:#f8faff;border-color:#b9c8e8}
+.fail-rank{flex:0 0 26px;height:26px;border-radius:7px;background:#f0f3fa;color:var(--muted);font-weight:700;display:grid;place-items:center;font-size:12px}
+.fail-main{flex:1;min-width:0}
+.fail-q{display:block;font-size:13px;font-weight:600;line-height:1.35}
+.fail-meta{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+.fail-rate{display:block;flex:0 0 108px;text-align:right;font-size:11.5px;color:var(--muted)}
+.fail-rate b{display:block;font-size:15px;color:var(--ink)}
+.fail-bar{display:block;height:5px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:4px}
+.fail-bar i{display:block;height:100%;background:linear-gradient(90deg,#e08b81,#c0392b)}
+.stats-note{font-size:12px;color:var(--muted);margin:0 0 12px}
+
 /* ---------- administración ---------- */
 .dispute-q{font-size:13.5px;color:#33415c;background:#f7f9fd;border-left:3px solid var(--accent);padding:10px 12px;border-radius:8px;margin:0 0 14px;max-height:160px;overflow:auto}
 .dispute-opts{display:grid;gap:7px;margin-bottom:14px}
@@ -247,7 +270,7 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
       <div class="authbox" id="authBox"></div>
       <button class="btn" id="bibBtn" style="padding:8px 12px;font-size:13px">Bibliografía</button>
       <button class="iconbtn mobile-only" id="menuBtn" title="Preguntas">&#9776;</button>
-      <button class="iconbtn" id="resetBtn" title="Reiniciar batería">&#8634;</button>
+      <button class="iconbtn" id="resetBtn" title="Nuevo intento">&#8634;</button>
     </div>
   </header>
 
@@ -283,6 +306,12 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
           </select>
           <select id="fTopic"><option value="all">Todos los temas</option></select>
         </div>
+        <div class="attempt-bar">
+          <label>Intento
+            <select id="fAttempt"></select>
+          </label>
+          <button class="btn" id="newAttemptBtn" type="button">+ Nuevo</button>
+        </div>
       </div>
       <div class="qlist" id="qlist"></div>
       <div class="aside-foot">
@@ -300,8 +329,9 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
           Teclado: <kbd>1</kbd>&ndash;<kbd>4</kbd> o <kbd>a</kbd>&ndash;<kbd>d</kbd> responder &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> navegar &middot; <kbd>Enter</kbd> siguiente
         </div>
         <div class="toolbar">
+          <button class="btn" id="statsBtn">Preguntas más falladas</button>
           <button class="btn" id="wrongOnlyBtn">Repasar falladas</button>
-          <button class="btn" id="clearBtn">Borrar progreso</button>
+          <button class="btn" id="clearBtn">Borrar intentos</button>
         </div>
       </div>
     </main>
@@ -385,6 +415,26 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
       <button class="btn" id="adminClose" type="button">Cerrar</button>
     </div>
     <div class="modal-body" id="adminBody"></div>
+  </div>
+</div>
+
+<!-- Ranking de preguntas más falladas -->
+<div class="modal" id="statsModal">
+  <div class="modal-card" style="max-width:940px">
+    <div class="modal-head">
+      <h3>Preguntas más falladas</h3>
+      <div class="tabs" style="margin:0;flex:0 0 auto">
+        <button class="tab on" type="button" data-stats="global">Global</button>
+        <button class="tab" type="button" data-stats="mine">Mis fallos</button>
+      </div>
+      <select id="statsBat">
+        <option value="all">Todas</option>
+        <option value="comun">Común</option>
+        <option value="fem">FEM</option>
+      </select>
+      <button class="btn" id="statsClose" type="button">Cerrar</button>
+    </div>
+    <div class="modal-body" id="statsBody"></div>
   </div>
 </div>
 

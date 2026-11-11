@@ -114,23 +114,131 @@
   }
 
   // ============================================================
-  //  Estado local (progreso de respuestas)
+  //  Estado local: intentos agrupados
   // ============================================================
-  let store = { answers: {} };
-  try { const s = JSON.parse(localStorage.getItem(LS) || 'null'); if (s && s.answers) store = s; } catch (e) { /* almacenamiento no disponible */ }
+  // Cada intento guarda solo las preguntas que el usuario haya respondido.
+  // Puede quedar incompleto y se puede revisar cuando quiera.
+  const EMPTY = Object.freeze({});
+  const newId = () => (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : 'g-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+
+  function emptyStore() {
+    return { v: 2, owner: null, groups: [], active: { comun: null, fem: null } };
+  }
+
+  function migrateLegacyStore(s) {
+    const st = emptyStore();
+    st.owner = s.owner || null;
+    const answers = s.answers || {};
+    for (const bat of ['comun', 'fem']) {
+      const subset = {};
+      for (const [uid, a] of Object.entries(answers)) {
+        if (uid.startsWith(bat + '-')) subset[uid] = a;
+      }
+      if (Object.keys(subset).length) {
+        const id = newId();
+        st.groups.push({
+          id,
+          battery: bat,
+          name: 'Progreso anterior',
+          created_at: new Date().toISOString(),
+          answers: subset
+        });
+        st.active[bat] = id;
+      }
+    }
+    return st;
+  }
+
+  let store = emptyStore();
+  try {
+    const s = JSON.parse(localStorage.getItem(LS) || 'null');
+    if (s && s.v === 2 && Array.isArray(s.groups)) store = s;
+    else if (s && s.answers) store = migrateLegacyStore(s);
+  } catch (e) { /* almacenamiento no disponible */ }
+  if (!store.active) store.active = { comun: null, fem: null };
+  if (!Array.isArray(store.groups)) store.groups = [];
   const save = () => { try { localStorage.setItem(LS, JSON.stringify(store)); } catch (e) { /* almacenamiento no disponible */ } };
 
   const state = {
     bat: 'comun',
     uid: 'comun-1',
-    view: 'q',        // 'q' | 'case'
+    view: 'q',              // 'q' | 'case'
     caseId: null,
     text: '',
     status: 'all',
     conf: 'all',
     topic: 'all',
-    shuffle: null
+    shuffle: null,
+    reviewGroupId: null     // null = intento actual; id = revisando un intento pasado
   };
+
+  // ---------- helpers de intentos ----------
+  function groupById(id) { return store.groups.find(g => g.id === id) || null; }
+  function groupsFor(bat) {
+    return store.groups
+      .filter(g => g.battery === bat)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  }
+  function activeGroup(bat) {
+    return groupById(store.active[bat || state.bat]);
+  }
+  function reviewGroup() {
+    return state.reviewGroupId ? groupById(state.reviewGroupId) : null;
+  }
+  function viewGroup() {
+    return reviewGroup() || activeGroup(state.bat);
+  }
+  function viewAnswers() {
+    const g = viewGroup();
+    return g ? g.answers : EMPTY;
+  }
+  function groupStats(g) {
+    if (!g) return { answered: 0, correct: 0, pct: 0 };
+    const answers = Object.values(g.answers || {});
+    const correct = answers.filter(a => a.ok).length;
+    return {
+      answered: answers.length,
+      correct,
+      pct: answers.length ? Math.round(correct * 100 / answers.length) : 0
+    };
+  }
+  function nextAttemptName(bat) {
+    let max = 0;
+    for (const g of groupsFor(bat)) {
+      const m = /^Intento\s+(\d+)$/i.exec(g.name || '');
+      if (m) max = Math.max(max, Number(m[1]));
+    }
+    return 'Intento ' + (max + 1);
+  }
+  function createGroup(bat) {
+    const g = {
+      id: newId(),
+      battery: bat,
+      name: nextAttemptName(bat),
+      created_at: new Date().toISOString(),
+      answers: {}
+    };
+    store.groups.push(g);
+    store.active[bat] = g.id;
+    save();
+    if (SB && session) {
+      SB.from('attempt_groups').upsert({
+        id: g.id,
+        user_id: session.user.id,
+        battery: g.battery,
+        name: g.name,
+        created_at: g.created_at
+      }, { onConflict: 'id' }).then(({ error }) => {
+        if (error) console.warn('[intentos]', error.message);
+      });
+    }
+    return g;
+  }
+  function ensureActiveGroup(bat) {
+    return activeGroup(bat) || createGroup(bat);
+  }
 
   // ============================================================
   //  Supabase: sesión, perfil, confirmaciones, progreso
@@ -143,6 +251,8 @@
   let authMode = 'login';
   let disputeUid = null;
   let adminTab = 'users';
+  let statsMode = 'global';
+  let statsBat = 'all';
 
   function toast(msg, type) {
     let t = $('#toast');
@@ -260,46 +370,224 @@
   async function syncAttempts() {
     if (!SB || !session) return;
     try {
-      // Aislamiento en dispositivos compartidos: el progreso local pertenece
-      // al último usuario que inició sesión. Si entra otra cuenta, no se
-      // mezclan sus respuestas.
+      // Aislamiento en dispositivos compartidos: los intentos locales
+      // pertenecen al último usuario que inició sesión.
       if (store.owner && store.owner !== session.user.id) {
-        store.answers = {};
+        store.groups = [];
+        store.active = { comun: null, fem: null };
         save();
       }
       store.owner = session.user.id;
       save();
-      const { data, error } = await SB.from('attempts')
-        .select('question_uid,pick,is_correct,answered_at')
-        .eq('user_id', session.user.id);
-      if (error) { console.warn('[progreso]', error.message); return; }
-      let changed = false;
-      for (const r of data || []) {
-        if (!questions[r.question_uid]) continue;
-        const ts = Date.parse(r.answered_at) || 0;
-        const local = store.answers[r.question_uid];
-        if (!local || (local.ts || 0) < ts) {
-          store.answers[r.question_uid] = { pick: r.pick, ok: !!r.is_correct, ts };
-          changed = true;
+
+      const { data: rgroups, error: eg } = await SB.from('attempt_groups')
+        .select('id,battery,name,created_at')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: true });
+      if (eg) { console.warn('[intentos]', eg.message); return; }
+
+      // Descarga paginada de todas las respuestas del usuario.
+      let rows = [];
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await SB.from('attempts')
+          .select('group_id,question_uid,pick,is_correct,answered_at')
+          .eq('user_id', session.user.id)
+          .order('answered_at', { ascending: true })
+          .range(from, from + 999);
+        if (error) { console.warn('[intentos]', error.message); break; }
+        rows = rows.concat(data || []);
+        if (!data || data.length < 1000) break;
+      }
+
+      const remoteById = new Map();
+      for (const g of rgroups || []) remoteById.set(g.id, Object.assign({}, g, { answers: {} }));
+      for (const r of rows) {
+        const g = remoteById.get(r.group_id);
+        if (!g || !questions[r.question_uid]) continue;
+        g.answers[r.question_uid] = {
+          pick: r.pick,
+          ok: !!r.is_correct,
+          ts: Date.parse(r.answered_at) || 0
+        };
+      }
+
+      const localById = new Map(store.groups.map(g => [g.id, g]));
+      const uploadGroups = [];
+      const uploadAnswers = [];
+
+      // Fusionar lo remoto con lo local (gana la respuesta más reciente).
+      for (const [id, rg] of remoteById) {
+        const lg = localById.get(id);
+        if (!lg) { store.groups.push(rg); continue; }
+        if (!lg.answers) lg.answers = {};
+        for (const [uid, ra] of Object.entries(rg.answers)) {
+          const la = lg.answers[uid];
+          if (!la || (la.ts || 0) < (ra.ts || 0)) {
+            lg.answers[uid] = ra;
+          } else if ((la.ts || 0) > (ra.ts || 0)) {
+            uploadAnswers.push({ group_id: id, uid, a: la });
+          }
         }
       }
-      if (changed) save();
-      const rows = Object.entries(store.answers)
-        .filter(([uid]) => questions[uid])
-        .map(([uid, a]) => ({
-          user_id: session.user.id,
-          question_uid: uid,
-          pick: a.pick,
-          is_correct: !!a.ok,
-          answered_at: new Date(a.ts || Date.now()).toISOString()
-        }));
-      if (rows.length) {
-        const { error: e2 } = await SB.from('attempts').upsert(rows, { onConflict: 'user_id,question_uid' });
-        if (e2) console.warn('[progreso]', e2.message);
+
+      // Subir intentos y respuestas que solo existen en local.
+      for (const lg of store.groups) {
+        if (!lg.answers) lg.answers = {};
+        if (!remoteById.has(lg.id)) {
+          uploadGroups.push(lg);
+          for (const [uid, a] of Object.entries(lg.answers)) {
+            uploadAnswers.push({ group_id: lg.id, uid, a });
+          }
+        } else {
+          const rg = remoteById.get(lg.id);
+          for (const [uid, a] of Object.entries(lg.answers)) {
+            if (!rg.answers[uid]) uploadAnswers.push({ group_id: lg.id, uid, a });
+          }
+        }
       }
+
+      // Elegir intento activo si no hay uno válido.
+      for (const bat of ['comun', 'fem']) {
+        if (!store.active[bat] || !groupById(store.active[bat])) {
+          const gs = groupsFor(bat);
+          store.active[bat] = gs.length ? gs[0].id : null;
+        }
+      }
+      save();
+
+      if (uploadGroups.length) {
+        const payload = uploadGroups.map(g => ({
+          id: g.id,
+          user_id: session.user.id,
+          battery: g.battery,
+          name: g.name,
+          created_at: g.created_at
+        }));
+        const { error } = await SB.from('attempt_groups').upsert(payload, { onConflict: 'id' });
+        if (error) console.warn('[intentos]', error.message);
+      }
+
+      if (uploadAnswers.length) {
+        const payload = uploadAnswers.map(x => ({
+          group_id: x.group_id,
+          user_id: session.user.id,
+          question_uid: x.uid,
+          pick: x.a.pick,
+          is_correct: !!x.a.ok,
+          answered_at: new Date(x.a.ts || Date.now()).toISOString()
+        }));
+        for (let i = 0; i < payload.length; i += 500) {
+          const { error } = await SB.from('attempts').upsert(payload.slice(i, i + 500), { onConflict: 'group_id,question_uid' });
+          if (error) { console.warn('[intentos]', error.message); break; }
+        }
+      }
+
       updateStats();
-    } catch (e) { console.warn('[progreso]', e); }
+      renderAttemptSelect();
+    } catch (e) { console.warn('[intentos]', e); }
   }
+
+  // ============================================================
+  //  Intentos: selector, revisión y arranque
+  // ============================================================
+  function fmtShortDate(s) {
+    try {
+      const d = new Date(s);
+      return d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }) + ' ' +
+        d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    } catch (e) { return ''; }
+  }
+
+  function renderAttemptSelect() {
+    const sel = $('#fAttempt');
+    if (!sel) return;
+    const active = activeGroup(state.bat);
+    const groups = groupsFor(state.bat);
+    let html = '';
+    if (active) {
+      const s = groupStats(active);
+      html += `<option value="active">${esc(active.name)} (actual) · ${s.answered} resp.${s.answered ? ' · ' + s.pct + '%' : ''}</option>`;
+    } else {
+      html += '<option value="">Sin intento activo</option>';
+    }
+    for (const g of groups) {
+      if (active && g.id === active.id) continue;
+      const s = groupStats(g);
+      html += `<option value="g:${g.id}">${esc(g.name)} · ${fmtShortDate(g.created_at)} · ${s.answered} resp.${s.answered ? ' · ' + s.pct + '%' : ''}</option>`;
+    }
+    sel.innerHTML = html;
+    sel.value = state.reviewGroupId && groupById(state.reviewGroupId)
+      ? 'g:' + state.reviewGroupId
+      : (active ? 'active' : '');
+  }
+
+  function applyBatteryUI(bat, opts) {
+    state.bat = bat;
+    state.topic = 'all';
+    state.status = 'all';
+    state.text = '';
+    state.shuffle = null;
+    $('#search').value = '';
+    $('#fStatus').value = 'all';
+    if (!opts || !opts.keepReview) state.reviewGroupId = null;
+    $('#subtitle').textContent = BATS[bat].sub;
+    document.querySelectorAll('.tab[data-bat]').forEach(x => x.classList.toggle('on', x.dataset.bat === bat));
+    renderTopics();
+    renderAttemptSelect();
+  }
+
+  function startNewAttempt() {
+    const active = activeGroup(state.bat);
+    if (active && Object.keys(active.answers).length === 0 && !state.reviewGroupId) {
+      toast('Ya estás en un intento vacío.', 'ok');
+      return;
+    }
+    state.reviewGroupId = null;
+    const g = createGroup(state.bat);
+    renderAttemptSelect();
+    renderAll(false);
+    toast(g.name + ' iniciado', 'ok');
+  }
+
+  function groupFirstQuestion(g) {
+    const uids = Object.keys(g.answers || {}).filter(uid => questions[uid]);
+    uids.sort((a, b) => questions[a].numero - questions[b].numero);
+    return uids.length ? questions[uids[0]] : null;
+  }
+
+  function enterReview(id) {
+    const g = groupById(id);
+    if (!g) return;
+    state.shuffle = null;
+    if (g.battery !== state.bat) {
+      state.reviewGroupId = g.id;
+      applyBatteryUI(g.battery, { keepReview: true });
+    } else {
+      state.reviewGroupId = g.id;
+      renderAttemptSelect();
+    }
+    const q = groupFirstQuestion(g);
+    if (q) go(q.uid);
+    else renderAll(false);
+  }
+
+  function exitReview() {
+    state.reviewGroupId = null;
+    renderAttemptSelect();
+    renderAll(false);
+  }
+
+  function reviewBanner() {
+    const g = reviewGroup();
+    if (!g) return '';
+    const s = groupStats(g);
+    return `<div class="review-banner">
+      <div><b>Revisando ${esc(g.name)}</b> &middot; ${fmtDate(g.created_at)} &middot;
+        ${s.answered} respondidas &middot; ${s.pct}% aciertos</div>
+      <button class="btn" id="exitReviewBtn" type="button">Salir de la revisión</button>
+    </div>`;
+  }
+
 
   // ============================================================
   //  Autenticación (UI)
@@ -533,7 +821,7 @@
     }
     if (st.status !== 'all') {
       const has = unit.questions.some(q => {
-        const a = store.answers[q.uid];
+        const a = viewAnswers()[q.uid];
         if (st.status === 'pending') return !a;
         if (st.status === 'wrong') return a && !a.ok;
         if (st.status === 'right') return a && a.ok;
@@ -563,7 +851,16 @@
   }
 
   function poolUnits() {
-    let arr = unitsFor(state.bat).filter(matchesFilters);
+    let base = unitsFor(state.bat);
+    const rg = reviewGroup();
+    if (rg) {
+      base = base.map(u => {
+        const qs = u.questions.filter(q => rg.answers[q.uid]);
+        if (!qs.length) return null;
+        return Object.assign({}, u, { questions: qs, reviewTotal: u.questions.length });
+      }).filter(Boolean);
+    }
+    let arr = base.filter(matchesFilters);
     if (state.shuffle) {
       const pos = new Map(state.shuffle.map((u, i) => [u, i]));
       arr = arr.slice().sort((a, b) => {
@@ -591,7 +888,8 @@
   function stats() {
     const all = Object.values(questions).filter(q => q.bat === state.bat);
     let done = 0, ok = 0;
-    for (const q of all) { const a = store.answers[q.uid]; if (a) { done++; if (a.ok) ok++; } }
+    const ans = viewAnswers();
+    for (const q of all) { const a = ans[q.uid]; if (a) { done++; if (a.ok) ok++; } }
     return { total: all.length, done, ok };
   }
 
@@ -604,32 +902,37 @@
 
   function renderList() {
     const arr = poolUnits();
+    const ans = viewAnswers();
+    const rg = reviewGroup();
     const box = $('#qlist');
     box.innerHTML = '';
     const frag = document.createDocumentFragment();
     for (const u of arr) {
       const cur = unitKey(u) === currentUnitKey();
       if (u.type === 'case') {
-        const answered = u.questions.filter(q => store.answers[q.uid]).length;
-        const allDone = answered === u.questions.length;
+        const total = rg ? (u.reviewTotal || u.questions.length) : u.questions.length;
+        const answered = rg ? u.questions.length : u.questions.filter(q => ans[q.uid]).length;
         const anyDone = answered > 0;
-        const anyWrong = u.questions.some(q => { const a = store.answers[q.uid]; return a && !a.ok; });
+        const anyWrong = u.questions.some(q => { const a = ans[q.uid]; return a && !a.ok; });
+        const allDone = !rg && answered === total;
         const allCorrect = allDone && !anyWrong;
         const allConf = u.questions.every(q => (confirmStats[q.uid] || {}).confirms > 0);
-        const stateCls = allDone ? (allCorrect ? ' ok' : ' bad') : (anyWrong ? ' bad' : '');
-        const dotCls = allDone || anyWrong ? '' : (anyDone ? ' part' : '');
+        const stateCls = rg
+          ? (anyWrong ? ' bad' : ' ok')
+          : (allDone ? (allCorrect ? ' ok' : ' bad') : (anyWrong ? ' bad' : ''));
+        const dotCls = rg || allDone || anyWrong ? '' : (anyDone ? ' part' : '');
         const b = el('button', 'qitem caseitem' + stateCls + (cur ? ' cur' : ''));
         b.innerHTML = `<span class="dot${dotCls}"></span>` +
           `<span class="casename">Caso ${u.id}</span><small>${u.desde}&ndash;${u.hasta}</small>` +
           (allConf ? '<span class="confmark" title="Todas las preguntas confirmadas">&#10003;</span>' : '');
         b.title = `Caso clínico ${u.id} · preguntas ${u.desde}-${u.hasta}` +
-          (answered ? ` · ${answered}/${u.questions.length} respondidas` : '') +
+          (rg ? ` · ${answered}/${total} en este intento` : (answered ? ` · ${answered}/${total} respondidas` : '')) +
           (anyWrong ? ' · con fallos' : '');
         b.onclick = () => { goUnit(u); closeSidebar(); };
         frag.appendChild(b);
       } else {
         const q = u.questions[0];
-        const a = store.answers[q.uid];
+        const a = ans[q.uid];
         const confirmed = (confirmStats[q.uid] || {}).confirms > 0;
         const b = el('button', 'qitem' + (a ? (a.ok ? ' ok' : ' bad') : '') + (cur ? ' cur' : '') + (confirmed ? ' confirmed' : ''));
         b.innerHTML = `<span class="dot"></span>${q.numero}`;
@@ -641,7 +944,8 @@
     box.appendChild(frag);
     const totalQ = arr.reduce((n, u) => n + u.questions.length, 0);
     const nCases = arr.filter(u => u.type === 'case').length;
-    $('#viewCount').textContent = totalQ + ' pregunta' + (totalQ === 1 ? '' : 's') + (nCases ? ' · ' + nCases + ' caso' + (nCases === 1 ? '' : 's') : '');
+    $('#viewCount').textContent = totalQ + ' pregunta' + (totalQ === 1 ? '' : 's') +
+      (rg ? ' en este intento' : (nCases ? ' · ' + nCases + ' caso' + (nCases === 1 ? '' : 's') : ''));
     const cur = box.querySelector('.cur');
     if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' });
   }
@@ -679,13 +983,16 @@
 
   function questionHtml(q, opts) {
     opts = opts || {};
-    const a = store.answers[q.uid];
+    const a = viewAnswers()[q.uid];
+    const review = !!reviewGroup();
     const entries = Object.entries(q.opciones || {});
     let html = `<div class="qhead">
       <span class="num">Pregunta ${q.numero}</span>
       ${opts.caseView ? '' : `<span class="tag">${esc(topicOf(q))}</span>`}
       ${confirmBadges(q)}
-      ${a ? confidenceBadge(q.confidence || 0) : '<span class="tag">Respuesta deducida · no oficial</span>'}
+      ${review && !a
+        ? '<span class="tag conf-none">No respondida en este intento</span>'
+        : (a ? confidenceBadge(q.confidence || 0) : '<span class="tag">Respuesta deducida · no oficial</span>')}
     </div>`;
 
     if (q.contexto && !opts.caseView) {
@@ -699,17 +1006,20 @@
         else if (k === a.pick) cls += ' wrong';
         else cls += ' dim';
       }
-      return `<button class="${cls}" type="button" data-k="${k}" data-uid="${q.uid}" ${a ? 'disabled' : ''}><span class="k">${k}</span><span class="t">${esc(v)}</span></button>`;
+      return `<button class="${cls}" type="button" data-k="${k}" data-uid="${q.uid}" ${(a || review) ? 'disabled' : ''}><span class="k">${k}</span><span class="t">${esc(v)}</span></button>`;
     }).join('') + '</div>';
 
     if (a) {
       const ok = a.pick === q.answer;
       html += `<div class="feedback show ${ok ? 'ok' : 'bad'}">${ok ? '&#10003; Correcto' : '&#10007; Incorrecto'}
-        <small>Respuesta correcta: <b>${String(q.answer).toLowerCase()})</b> ${esc(q.opciones[q.answer])}</small></div>`;
+        <small>Tu respuesta: <b>${esc(a.pick)})</b> ${esc(q.opciones[a.pick] || '')} &middot;
+        Correcta: <b>${String(q.answer).toLowerCase()})</b> ${esc(q.opciones[q.answer])}</small></div>`;
       html += sourceHtml(q);
       if (q.notas) html += `<div class="notes">${esc(q.notas)}</div>`;
+    } else if (review) {
+      html += '<div class="notes">Esta pregunta no se respondió en este intento.</div>';
     }
-    html += confirmRow(q);
+    if (!review) html += confirmRow(q);
     return html;
   }
 
@@ -729,19 +1039,28 @@
   }
 
   function caseHtml(c) {
-    const answered = c.questions.filter(q => store.answers[q.uid]).length;
-    const confirmed = c.questions.filter(q => (confirmStats[q.uid] || {}).confirms > 0).length;
+    const rg = reviewGroup();
+    const ans = viewAnswers();
+    const qs = rg ? c.questions.filter(q => ans[q.uid]) : c.questions;
+    const answered = qs.filter(q => ans[q.uid]).length;
+    const confirmed = qs.filter(q => (confirmStats[q.uid] || {}).confirms > 0).length;
     let html = `<div class="case-head">
       <span class="num">Caso clínico ${c.id}</span>
       <span class="tag">Preguntas ${c.desde}&ndash;${c.hasta}</span>
-      <span class="tag">${answered}/${c.questions.length} respondidas</span>
+      <span class="tag">${rg ? `${answered} de ${c.questions.length} en este intento` : `${answered}/${c.questions.length} respondidas`}</span>
       <span class="tag ${confirmed ? 'conf-ok' : 'conf-none'}">${confirmed ? '&#10003; ' + confirmed + ' confirmada' + (confirmed === 1 ? '' : 's') : 'Sin confirmar'}</span>
     </div>`;
     if (c.contexto) {
       html += `<div class="case case-full"><b>Enunciado del caso</b><div class="txt">${esc(c.contexto)}</div></div>`;
     }
-    html += `<div class="case-progress">Responde a todas las preguntas del caso. Puedes confirmar cada respuesta por separado.</div>`;
-    html += c.questions.map(q => `<section class="case-sub" data-uid="${q.uid}">${questionHtml(q, { caseView: true })}</section>`).join('');
+    html += `<div class="case-progress">${rg
+      ? 'Mostrando solo las preguntas respondidas en este intento.'
+      : 'Responde a todas las preguntas del caso. Puedes confirmar cada respuesta por separado.'}</div>`;
+    if (!qs.length) {
+      html += '<div class="notes">No hay preguntas de este caso en este intento.</div>';
+    } else {
+      html += qs.map(q => `<section class="case-sub" data-uid="${q.uid}">${questionHtml(q, { caseView: true })}</section>`).join('');
+    }
     html += navHtml();
     return html;
   }
@@ -752,14 +1071,14 @@
     if (state.view === 'case') {
       const c = cases[state.caseId];
       if (!c) { card.innerHTML = '<div class="empty">Caso clínico no encontrado.</div>'; return; }
-      card.innerHTML = caseHtml(c);
+      card.innerHTML = reviewBanner() + caseHtml(c);
     } else {
       const q = questions[state.uid];
       if (!q) {
         card.innerHTML = '<div class="empty">No hay preguntas con los filtros seleccionados.</div>';
         return;
       }
-      card.innerHTML = questionHtml(q, { caseView: false }) + navHtml();
+      card.innerHTML = reviewBanner() + questionHtml(q, { caseView: false }) + navHtml();
     }
     bindCard();
     if (preserveScroll) requestAnimationFrame(() => { try { window.scrollTo(0, y); } catch (e) { /* navegador sin scroll */ } });
@@ -774,6 +1093,8 @@
     card.querySelectorAll('[data-dispute]').forEach(b => { b.onclick = () => openDispute(b.dataset.dispute); });
     card.querySelectorAll('[data-unconfirm]').forEach(b => { b.onclick = () => withdrawConfirmation(b.dataset.unconfirm); });
     card.querySelectorAll('[data-auth-open]').forEach(b => { b.onclick = () => openAuth(); });
+    const exitBtn = $('#exitReviewBtn');
+    if (exitBtn) exitBtn.onclick = () => exitReview();
     const prev = $('#prevBtn'), next = $('#nextBtn');
     if (prev) prev.onclick = () => jump(-1);
     if (next) next.onclick = () => jump(1);
@@ -790,21 +1111,37 @@
   // ============================================================
   function answer(uid, letter) {
     const q = questions[uid];
-    if (!q || store.answers[uid]) return;
+    if (!q || state.reviewGroupId) return;
+    const g = ensureActiveGroup(q.bat);
+    if (g.answers[uid]) return;
     const ts = Date.now();
-    store.answers[uid] = { pick: letter, ok: letter === q.answer, ts };
+    const isCorrect = letter === q.answer;
+    g.answers[uid] = { pick: letter, ok: isCorrect, ts };
     save();
     if (SB && session) {
-      SB.from('attempts').upsert({
+      const row = {
+        group_id: g.id,
         user_id: session.user.id,
         question_uid: uid,
         pick: letter,
-        is_correct: letter === q.answer,
+        is_correct: isCorrect,
         answered_at: new Date(ts).toISOString()
-      }, { onConflict: 'user_id,question_uid' }).then(({ error }) => {
-        if (error) console.warn('[progreso]', error.message);
-      });
+      };
+      (async () => {
+        // Aseguramos el intento antes de insertar la respuesta (FK).
+        const { error: e1 } = await SB.from('attempt_groups').upsert({
+          id: g.id,
+          user_id: session.user.id,
+          battery: g.battery,
+          name: g.name,
+          created_at: g.created_at
+        }, { onConflict: 'id' });
+        if (e1) { console.warn('[intentos]', e1.message); return; }
+        const { error: e2 } = await SB.from('attempts').upsert(row, { onConflict: 'group_id,question_uid' });
+        if (e2) console.warn('[intentos]', e2.message);
+      })();
     }
+    renderAttemptSelect();
     renderAll(true);
   }
 
@@ -822,7 +1159,8 @@
   function goUnit(u) {
     if (!u) return;
     if (u.type === 'case') {
-      const pending = u.questions.find(q => !store.answers[q.uid]);
+      const ans = viewAnswers();
+      const pending = u.questions.find(q => !ans[q.uid]);
       go((pending || u.questions[0]).uid);
     } else {
       go(u.uid);
@@ -936,6 +1274,115 @@
   }
 
   // ============================================================
+  //  Ranking de preguntas más falladas
+  // ============================================================
+  function computeMyFailureStats() {
+    const map = {};
+    for (const g of store.groups) {
+      for (const [uid, a] of Object.entries(g.answers || {})) {
+        if (!questions[uid]) continue;
+        const m = map[uid] || (map[uid] = { question_uid: uid, attempts: 0, failures: 0 });
+        m.attempts += 1;
+        if (!a.ok) m.failures += 1;
+      }
+    }
+    return Object.values(map).map(m => Object.assign({}, m, {
+      failure_rate: m.attempts ? Math.round(m.failures * 1000 / m.attempts) / 10 : 0
+    }));
+  }
+
+  function renderFailureStats(rows, sourceLabel) {
+    const body = $('#statsBody');
+    if (!rows.length) {
+      body.innerHTML = '<div class="empty">Todavía no hay preguntas falladas registradas.</div>';
+      return;
+    }
+    const maxFail = Math.max.apply(null, rows.map(r => r.failures).concat([1]));
+    let html = `<div class="stats-note">${esc(sourceLabel)} &middot; ordenado por número de fallos. Pulsa una pregunta para abrirla.</div><div class="fail-list">`;
+    rows.forEach((r, i) => {
+      const q = questions[r.question_uid];
+      if (!q) return;
+      const rate = Number(r.failure_rate) || 0;
+      const batLabel = q.bat === 'comun' ? 'Común' : 'FEM';
+      const caseLabel = q.caso != null ? ` &middot; Caso ${q.caso}` : '';
+      const width = Math.max(4, Math.round(r.failures * 100 / maxFail));
+      const text = q.pregunta.length > 160 ? q.pregunta.slice(0, 160) + '…' : q.pregunta;
+      html += `<button class="fail-row" type="button" data-uid="${r.question_uid}">
+        <span class="fail-rank">${i + 1}</span>
+        <span class="fail-main">
+          <span class="fail-q"><b>${q.numero}.</b> ${esc(text)}</span>
+          <span class="fail-meta">${batLabel}${caseLabel} &middot; ${r.failures} fallo${r.failures === 1 ? '' : 's'} de ${r.attempts} intento${r.attempts === 1 ? '' : 's'}</span>
+        </span>
+        <span class="fail-rate"><b>${rate}%</b><span class="fail-bar"><i style="width:${width}%"></i></span></span>
+      </button>`;
+    });
+    html += '</div>';
+    body.innerHTML = html;
+    body.querySelectorAll('.fail-row').forEach(btn => {
+      btn.onclick = () => {
+        $('#statsModal').classList.remove('open');
+        goToStatQuestion(btn.dataset.uid);
+      };
+    });
+  }
+
+  async function loadFailureStats() {
+    const body = $('#statsBody');
+    body.innerHTML = '<div class="empty">Cargando&hellip;</div>';
+    let rows = [];
+    let source = '';
+    if (statsMode === 'mine') {
+      rows = computeMyFailureStats();
+      source = 'Tus intentos';
+    } else if (SB) {
+      try {
+        const { data, error } = await SB.rpc('question_failure_stats');
+        if (error) throw error;
+        rows = (data || []).map(r => ({
+          question_uid: r.question_uid,
+          attempts: Number(r.attempts),
+          failures: Number(r.failures),
+          failure_rate: Number(r.failure_rate)
+        }));
+        source = 'Todos los usuarios';
+      } catch (e) {
+        body.innerHTML = `<div class="empty">No se pudo cargar el ranking global: ${esc(e.message || e)}</div>`;
+        return;
+      }
+    } else {
+      rows = computeMyFailureStats();
+      source = 'Este dispositivo (sin Supabase)';
+    }
+    if (statsBat !== 'all') {
+      rows = rows.filter(r => questions[r.question_uid] && questions[r.question_uid].bat === statsBat);
+    }
+    rows = rows.filter(r => questions[r.question_uid] && Number(r.failures) > 0);
+    rows.sort((a, b) => (b.failures - a.failures) || (b.failure_rate - a.failure_rate) || (b.attempts - a.attempts));
+    renderFailureStats(rows.slice(0, 30), source);
+  }
+
+  function goToStatQuestion(uid) {
+    const q = questions[uid];
+    if (!q) return;
+    state.reviewGroupId = null;
+    if (q.bat !== state.bat) {
+      state.view = 'q';
+      state.caseId = null;
+      applyBatteryUI(q.bat);
+    }
+    go(uid);
+  }
+
+  function openStats() {
+    statsMode = 'global';
+    statsBat = 'all';
+    document.querySelectorAll('[data-stats]').forEach(t => t.classList.toggle('on', t.dataset.stats === 'global'));
+    $('#statsBat').value = 'all';
+    $('#statsModal').classList.add('open');
+    loadFailureStats();
+  }
+
+  // ============================================================
   //  Bibliografía
   // ============================================================
   function renderBib(text) {
@@ -969,20 +1416,25 @@
   // ============================================================
   document.querySelectorAll('.tab[data-bat]').forEach(t => {
     t.onclick = () => {
-      document.querySelectorAll('.tab[data-bat]').forEach(x => x.classList.remove('on'));
-      t.classList.add('on');
-      state.bat = t.dataset.bat;
-      state.topic = 'all'; state.status = 'all'; state.text = '';
-      state.view = 'q'; state.caseId = null;
-      $('#search').value = ''; $('#fStatus').value = 'all';
-      state.shuffle = null;
-      $('#subtitle').textContent = BATS[state.bat].sub;
-      renderTopics();
+      state.view = 'q';
+      state.caseId = null;
+      applyBatteryUI(t.dataset.bat);
       const arr = poolUnits();
       if (arr.length) goUnit(arr[0]);
       else { state.uid = state.bat + '-1'; renderAll(false); }
     };
   });
+
+  $('#fAttempt').onchange = e => {
+    const v = e.target.value;
+    if (v.startsWith('g:')) enterReview(v.slice(2));
+    else {
+      state.reviewGroupId = null;
+      renderAttemptSelect();
+      renderAll(false);
+    }
+  };
+  $('#newAttemptBtn').onclick = () => startNewAttempt();
 
   $('#search').oninput = e => { state.text = e.target.value; renderList(); };
   $('#fStatus').onchange = e => { state.status = e.target.value; renderList(); };
@@ -1003,27 +1455,25 @@
     else alert('No hay preguntas falladas todavía.');
   };
   $('#clearBtn').onclick = async () => {
-    if (!confirm('¿Borrar todo el progreso guardado?')) return;
-    store = { answers: {} }; save();
-    if (SB && session) {
-      const { error } = await SB.from('attempts').delete().eq('user_id', session.user.id);
-      if (error) toast('Progreso borrado en este dispositivo, pero no en Supabase: ' + error.message, 'err');
-    }
-    renderAll(false);
-  };
-  $('#resetBtn').onclick = async () => {
-    const n = Object.keys(store.answers).filter(k => k.startsWith(state.bat + '-')).length;
-    if (!n || !confirm('¿Reiniciar las respuestas de esta batería?')) return;
-    for (const k of Object.keys(store.answers)) if (k.startsWith(state.bat + '-')) delete store.answers[k];
+    const groups = groupsFor(state.bat);
+    if (!groups.length) { alert('No hay intentos en esta batería.'); return; }
+    if (!confirm('¿Borrar todos los intentos de esta batería?')) return;
+    const ids = groups.map(g => g.id);
+    store.groups = store.groups.filter(g => g.battery !== state.bat);
+    store.active[state.bat] = null;
+    if (state.reviewGroupId && ids.includes(state.reviewGroupId)) state.reviewGroupId = null;
     save();
     if (SB && session) {
-      const { error } = await SB.from('attempts').delete()
+      const { error } = await SB.from('attempt_groups').delete()
         .eq('user_id', session.user.id)
-        .like('question_uid', state.bat + '-%');
-      if (error) toast('Progreso reiniciado en este dispositivo, pero no en Supabase: ' + error.message, 'err');
+        .eq('battery', state.bat);
+      if (error) toast('Borrado en local, pero no en Supabase: ' + error.message, 'err');
     }
+    renderAttemptSelect();
     renderAll(false);
+    toast('Intentos borrados', 'ok');
   };
+  $('#resetBtn').onclick = () => startNewAttempt();
   $('#menuBtn').onclick = () => $('#sidebar').classList.toggle('open');
 
   // Bibliografía
@@ -1062,6 +1512,19 @@
     };
   });
 
+  // Ranking de fallos
+  $('#statsBtn').onclick = () => openStats();
+  $('#statsClose').onclick = () => $('#statsModal').classList.remove('open');
+  $('#statsModal').onclick = (e) => { if (e.target.id === 'statsModal') $('#statsModal').classList.remove('open'); };
+  $('#statsBat').onchange = (e) => { statsBat = e.target.value; loadFailureStats(); };
+  document.querySelectorAll('[data-stats]').forEach(t => {
+    t.onclick = () => {
+      statsMode = t.dataset.stats;
+      document.querySelectorAll('[data-stats]').forEach(x => x.classList.toggle('on', x === t));
+      loadFailureStats();
+    };
+  });
+
   // Banner de configuración
   const bannerClose = $('#bannerClose');
   if (bannerClose) bannerClose.onclick = () => { $('#setupBanner').hidden = true; };
@@ -1074,7 +1537,7 @@
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
-      ['#bibModal', '#authModal', '#disputeModal', '#adminModal'].forEach(s => {
+      ['#bibModal', '#authModal', '#disputeModal', '#adminModal', '#statsModal'].forEach(s => {
         const n = $(s); if (n) n.classList.remove('open');
       });
       closeSidebar();
@@ -1083,10 +1546,10 @@
     if (e.target.matches('input,select,textarea')) return;
     if ($('.modal.open')) return;
     const q = questions[state.uid]; if (!q) return;
-    const a = store.answers[q.uid];
+    const a = viewAnswers()[q.uid];
     const k = e.key.toLowerCase();
     const map = { '1': 'a', '2': 'b', '3': 'c', '4': 'd', a: 'a', b: 'b', c: 'c', d: 'd' };
-    if (!a && map[k] && state.view === 'q') { e.preventDefault(); answer(q.uid, map[k]); return; }
+    if (!a && !state.reviewGroupId && map[k] && state.view === 'q') { e.preventDefault(); answer(q.uid, map[k]); return; }
     if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); jump(1); }
     if (e.key === 'ArrowLeft') { e.preventDefault(); jump(-1); }
   });
@@ -1103,6 +1566,7 @@
   document.querySelectorAll('.tab[data-bat]').forEach(x => x.classList.toggle('on', x.dataset.bat === state.bat));
   $('#subtitle').textContent = BATS[state.bat].sub;
   renderTopics();
+  renderAttemptSelect();
   renderAll(false);
   renderAuthUI();
   initSupabase();
