@@ -38,6 +38,7 @@ header{background:var(--panel);border-bottom:1px solid var(--line);padding:14px 
 .wrap{display:grid;grid-template-columns:308px minmax(0,1fr);gap:20px;padding:20px;max-width:1500px;width:100%;margin:0 auto;flex:1}
 aside{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);align-self:start;position:sticky;top:88px;max-height:calc(100vh - 108px);display:flex;flex-direction:column;overflow:hidden}
 .aside-head{padding:14px 14px 10px;border-bottom:1px solid var(--line)}
+.aside-mobile-head{display:none}
 .tabs{display:flex;gap:6px;margin-bottom:10px}
 .tab{flex:1;border:1px solid var(--line);background:#f8fafd;border-radius:9px;padding:7px 8px;font-size:12.5px;font-weight:600;color:var(--muted)}
 .tab.on{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -138,8 +139,15 @@ kbd{background:#eef2f8;border:1px solid #d9e1ee;border-bottom-width:2px;border-r
 @media (max-width:900px){
   .wrap{grid-template-columns:1fr;padding:12px}
   body.menu-open{overflow:hidden}
-  aside{position:fixed;inset:0;z-index:50;max-height:none;border-radius:0;transform:translateX(-102%);transition:transform .25s;overscroll-behavior:contain}
+  aside{position:fixed;inset:0;z-index:50;max-height:none;height:100vh;height:100dvh;border-radius:0;transform:translateX(-102%);transition:transform .25s;overscroll-behavior:contain}
   aside.open{transform:none}
+  .aside-mobile-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px 0}
+  .aside-mobile-head b{font-size:13px}
+  .aside-mobile-head .iconbtn{width:34px;height:34px}
+  .qlist{padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+  .aside-foot{padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+  input,select,textarea{font-size:16px !important}
+  .modal-card{max-height:88dvh}
   .mobile-only{display:inline-grid}
   .stats .stat:nth-child(2){display:none}
   .card{padding:18px}
@@ -290,6 +298,10 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
 
   <div class="wrap">
     <aside id="sidebar">
+      <div class="aside-mobile-head">
+        <b>Preguntas</b>
+        <button class="iconbtn" id="sidebarClose" type="button" aria-label="Cerrar menú">&#10005;</button>
+      </div>
       <div class="aside-head">
         <div class="tabs">
           <button class="tab on" data-bat="comun">Común · 200</button>
@@ -1443,7 +1455,7 @@ window.OPE_CONFIG = {
         b.title = `Caso clínico ${u.id} · preguntas ${u.desde}-${u.hasta}` +
           (rg ? ` · ${answered}/${total} en este intento` : (answered ? ` · ${answered}/${total} respondidas` : '')) +
           (anyWrong ? ' · con fallos' : '');
-        b.onclick = () => { goUnit(u); closeSidebar(); };
+        b.onclick = () => { goUnit(u); closeSidebar(true); };
         frag.appendChild(b);
       } else {
         const q = u.questions[0];
@@ -1452,7 +1464,7 @@ window.OPE_CONFIG = {
         const b = el('button', 'qitem' + (a ? (a.ok ? ' ok' : ' bad') : '') + (cur ? ' cur' : '') + (confirmed ? ' confirmed' : ''));
         b.innerHTML = `<span class="dot"></span>${q.numero}`;
         b.title = q.pregunta.slice(0, 90) + (confirmed ? ' · Respuesta confirmada' : '');
-        b.onclick = () => { go(q.uid); closeSidebar(); };
+        b.onclick = () => { go(q.uid); closeSidebar(true); };
         frag.appendChild(b);
       }
     }
@@ -1703,9 +1715,26 @@ window.OPE_CONFIG = {
     if (n) goUnit(n);
   }
 
-  function closeSidebar() {
+  let menuScrollY = 0;
+
+  function openSidebar() {
+    if (window.innerWidth > 900) return;
+    menuScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    document.body.style.top = '-' + menuScrollY + 'px';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.classList.add('menu-open');
+    $('#sidebar').classList.add('open');
+  }
+
+  function closeSidebar(resetScroll) {
+    const wasLocked = document.body.style.position === 'fixed';
     $('#sidebar').classList.remove('open');
     document.body.classList.remove('menu-open');
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.width = '';
+    if (wasLocked) window.scrollTo(0, resetScroll ? 0 : menuScrollY);
   }
 
   // ============================================================
@@ -2043,11 +2072,12 @@ window.OPE_CONFIG = {
   $('#resetBtn').onclick = () => startNewAttempt();
   $('#menuBtn').onclick = () => {
     const s = $('#sidebar');
-    s.classList.toggle('open');
-    document.body.classList.toggle('menu-open', s.classList.contains('open'));
+    if (s.classList.contains('open')) closeSidebar();
+    else openSidebar();
   };
+  $('#sidebarClose').onclick = () => closeSidebar();
   window.addEventListener('resize', () => {
-    if (window.innerWidth > 900) document.body.classList.remove('menu-open');
+    if (window.innerWidth > 900) closeSidebar();
   });
 
   // Bibliografía

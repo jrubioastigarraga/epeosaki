@@ -965,7 +965,7 @@
         b.title = `Caso clínico ${u.id} · preguntas ${u.desde}-${u.hasta}` +
           (rg ? ` · ${answered}/${total} en este intento` : (answered ? ` · ${answered}/${total} respondidas` : '')) +
           (anyWrong ? ' · con fallos' : '');
-        b.onclick = () => { goUnit(u); closeSidebar(); };
+        b.onclick = () => { goUnit(u); closeSidebar(true); };
         frag.appendChild(b);
       } else {
         const q = u.questions[0];
@@ -974,7 +974,7 @@
         const b = el('button', 'qitem' + (a ? (a.ok ? ' ok' : ' bad') : '') + (cur ? ' cur' : '') + (confirmed ? ' confirmed' : ''));
         b.innerHTML = `<span class="dot"></span>${q.numero}`;
         b.title = q.pregunta.slice(0, 90) + (confirmed ? ' · Respuesta confirmada' : '');
-        b.onclick = () => { go(q.uid); closeSidebar(); };
+        b.onclick = () => { go(q.uid); closeSidebar(true); };
         frag.appendChild(b);
       }
     }
@@ -1225,9 +1225,26 @@
     if (n) goUnit(n);
   }
 
-  function closeSidebar() {
+  let menuScrollY = 0;
+
+  function openSidebar() {
+    if (window.innerWidth > 900) return;
+    menuScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    document.body.style.top = '-' + menuScrollY + 'px';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.classList.add('menu-open');
+    $('#sidebar').classList.add('open');
+  }
+
+  function closeSidebar(resetScroll) {
+    const wasLocked = document.body.style.position === 'fixed';
     $('#sidebar').classList.remove('open');
     document.body.classList.remove('menu-open');
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.width = '';
+    if (wasLocked) window.scrollTo(0, resetScroll ? 0 : menuScrollY);
   }
 
   // ============================================================
@@ -1565,11 +1582,12 @@
   $('#resetBtn').onclick = () => startNewAttempt();
   $('#menuBtn').onclick = () => {
     const s = $('#sidebar');
-    s.classList.toggle('open');
-    document.body.classList.toggle('menu-open', s.classList.contains('open'));
+    if (s.classList.contains('open')) closeSidebar();
+    else openSidebar();
   };
+  $('#sidebarClose').onclick = () => closeSidebar();
   window.addEventListener('resize', () => {
-    if (window.innerWidth > 900) document.body.classList.remove('menu-open');
+    if (window.innerWidth > 900) closeSidebar();
   });
 
   // Bibliografía
