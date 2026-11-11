@@ -251,6 +251,7 @@
   let authMode = 'login';
   let disputeUid = null;
   let adminTab = 'users';
+  let adminConfFilter = 'all';
   let statsMode = 'global';
   let statsBat = 'all';
 
@@ -264,6 +265,34 @@
     toast._t = setTimeout(() => { t.hidden = true; }, 4200);
   }
   toast._t = null;
+
+  async function copyText(text) {
+    const value = String(text || '').trim();
+    if (!value) return;
+    let copied = false;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(value);
+        copied = true;
+      }
+    } catch (e) { /* probamos el método clásico */ }
+    if (!copied) {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = value;
+        ta.style.position = 'fixed';
+        ta.style.top = '-1000px';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        copied = document.execCommand('copy');
+        ta.remove();
+      } catch (e) { copied = false; }
+    }
+    if (copied) toast('Enunciado copiado', 'ok');
+    else toast('No se pudo copiar el enunciado', 'err');
+  }
 
   function authError(err) {
     const m = String((err && err.message) || '').toLowerCase();
@@ -1004,7 +1033,10 @@
     </div>`;
 
     if (q.contexto && !opts.caseView) {
-      html += `<div class="case"><b>Caso clínico ${q.caso || ''}</b><div class="txt">${esc(q.contexto)}</div></div>`;
+      html += `<div class="case">
+        <div class="case-top"><b>Caso clínico ${q.caso || ''}</b><button class="btn case-copy" type="button" data-copy-case="1">Copiar</button></div>
+        <div class="txt">${esc(q.contexto)}</div>
+      </div>`;
     }
     html += `<h2 class="question">${esc(q.pregunta)}</h2>`;
     html += '<div class="options">' + entries.map(([k, v]) => {
@@ -1059,7 +1091,10 @@
       <span class="tag ${confirmed ? 'conf-ok' : 'conf-none'}">${confirmed ? '&#10003; ' + confirmed + ' confirmada' + (confirmed === 1 ? '' : 's') : 'Sin confirmar'}</span>
     </div>`;
     if (c.contexto) {
-      html += `<div class="case case-full"><b>Enunciado del caso</b><div class="txt">${esc(c.contexto)}</div></div>`;
+      html += `<div class="case case-full">
+        <div class="case-top"><b>Enunciado del caso</b><button class="btn case-copy" type="button" data-copy-case="1">Copiar</button></div>
+        <div class="txt">${esc(c.contexto)}</div>
+      </div>`;
     }
     html += `<div class="case-progress">${rg
       ? 'Mostrando solo las preguntas respondidas en este intento.'
@@ -1103,6 +1138,13 @@
     card.querySelectorAll('[data-auth-open]').forEach(b => { b.onclick = () => openAuth(); });
     const exitBtn = $('#exitReviewBtn');
     if (exitBtn) exitBtn.onclick = () => exitReview();
+    card.querySelectorAll('[data-copy-case]').forEach(b => {
+      b.onclick = () => {
+        const box = b.closest('.case');
+        const txt = box ? box.querySelector('.txt') : null;
+        copyText(txt ? (txt.innerText || txt.textContent || '') : '');
+      };
+    });
     const prev = $('#prevBtn'), next = $('#nextBtn');
     if (prev) prev.onclick = () => jump(-1);
     if (next) next.onclick = () => jump(1);
@@ -1183,7 +1225,10 @@
     if (n) goUnit(n);
   }
 
-  function closeSidebar() { $('#sidebar').classList.remove('open'); }
+  function closeSidebar() {
+    $('#sidebar').classList.remove('open');
+    document.body.classList.remove('menu-open');
+  }
 
   // ============================================================
   //  Administración
@@ -1191,6 +1236,7 @@
   async function openAdmin() {
     if (!session || !profile || profile.role !== 'admin') return;
     adminTab = 'users';
+    adminConfFilter = 'all';
     document.querySelectorAll('[data-admin]').forEach(t => t.classList.toggle('on', t.dataset.admin === 'users'));
     $('#adminModal').classList.add('open');
     await renderAdmin();
@@ -1248,25 +1294,60 @@
       const byId = new Map((profRes.data || []).map(p => [p.id, p]));
       const confs = data.filter(r => r.is_correct).length;
       const disc = data.filter(r => !r.is_correct).length;
-      const rows = data.map(r => {
+      const filtered = adminConfFilter === 'disputes'
+        ? data.filter(r => !r.is_correct)
+        : adminConfFilter === 'confirms'
+          ? data.filter(r => r.is_correct)
+          : data;
+      const rows = filtered.map(r => {
         const q = questions[r.question_uid];
         const p = byId.get(r.user_id);
         const who = p ? (p.display_name || p.email) : r.user_id;
+        const actual = q ? q.answer : null;
+        const actualText = q && q.opciones ? q.opciones[actual] : '';
+        const propText = q && r.suggested_answer && q.opciones ? q.opciones[r.suggested_answer] : '';
+        const qText = q ? q.pregunta : r.question_uid;
         return `<tr>
-          <td><div class="admin-name">${q ? 'Pregunta ' + q.numero : esc(r.question_uid)}</div><div class="admin-sub">${esc(r.question_uid)}</div></td>
+          <td><div class="admin-name">${q ? 'Pregunta ' + q.numero : esc(r.question_uid)}</div><div class="admin-sub">${esc(qText.slice(0, 90))}${qText.length > 90 ? '…' : ''}</div></td>
           <td>${esc(who || '—')}</td>
           <td>${r.is_correct ? '<span class="tag conf-ok">Confirma</span>' : '<span class="tag conf-bad">Discrepa</span>'}</td>
-          <td>${r.suggested_answer ? `<b>${esc(r.suggested_answer)})</b> ${esc(q && q.opciones ? q.opciones[r.suggested_answer] : '')}` : '—'}</td>
+          <td>${actual ? `<b>${esc(actual)})</b> ${esc(actualText || '')}` : '—'}</td>
+          <td>${r.suggested_answer ? `<b>${esc(r.suggested_answer)})</b> ${esc(propText || '')}` : '—'}</td>
           <td class="admin-comment">${esc(r.comment || '')}</td>
           <td>${fmtDate(r.created_at)}</td>
-          <td><button class="btn admin-del" type="button" data-delconf="${r.id}">Eliminar</button></td>
+          <td><div class="admin-actions">
+            <button class="btn" type="button" data-open-q="${r.question_uid}">Ver pregunta</button>
+            <button class="btn" type="button" data-delconf="${r.id}">Eliminar</button>
+          </div></td>
         </tr>`;
       }).join('');
-      body.innerHTML = `<div class="admin-summary">${confs} confirmaciones · ${disc} discrepancias</div>
+      const emptyMsg = adminConfFilter === 'disputes'
+        ? 'No hay discrepancias pendientes'
+        : adminConfFilter === 'confirms'
+          ? 'No hay confirmaciones'
+          : 'Sin confirmaciones todavía';
+      body.innerHTML = `<div class="stats-note">Las discrepancias no cambian la respuesta automáticamente: quedan aquí para que revises la respuesta actual, la opción propuesta y el comentario.</div>
+        <div class="admin-filter">
+          <button class="tab${adminConfFilter === 'all' ? ' on' : ''}" type="button" data-conf-filter="all">Todas (${data.length})</button>
+          <button class="tab${adminConfFilter === 'disputes' ? ' on' : ''}" type="button" data-conf-filter="disputes">Discrepancias (${disc})</button>
+          <button class="tab${adminConfFilter === 'confirms' ? ' on' : ''}" type="button" data-conf-filter="confirms">Confirmaciones (${confs})</button>
+        </div>
         <div class="table-wrap"><table class="admin">
-        <thead><tr><th>Pregunta</th><th>Usuario</th><th>Tipo</th><th>Opción propuesta</th><th>Comentario</th><th>Fecha</th><th></th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="7" class="empty-row">Sin confirmaciones todavía</td></tr>'}</tbody>
+        <thead><tr><th>Pregunta</th><th>Usuario</th><th>Tipo</th><th>Respuesta actual</th><th>Opción propuesta</th><th>Comentario</th><th>Fecha</th><th></th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="8" class="empty-row">${emptyMsg}</td></tr>`}</tbody>
       </table></div>`;
+      body.querySelectorAll('[data-conf-filter]').forEach(b => {
+        b.onclick = () => {
+          adminConfFilter = b.dataset.confFilter;
+          renderAdmin();
+        };
+      });
+      body.querySelectorAll('[data-open-q]').forEach(b => {
+        b.onclick = () => {
+          $('#adminModal').classList.remove('open');
+          goToStatQuestion(b.dataset.openQ);
+        };
+      });
       body.querySelectorAll('[data-delconf]').forEach(b => {
         b.onclick = async () => {
           if (!confirm('¿Eliminar esta confirmación?')) return;
@@ -1482,7 +1563,14 @@
     toast('Intentos borrados', 'ok');
   };
   $('#resetBtn').onclick = () => startNewAttempt();
-  $('#menuBtn').onclick = () => $('#sidebar').classList.toggle('open');
+  $('#menuBtn').onclick = () => {
+    const s = $('#sidebar');
+    s.classList.toggle('open');
+    document.body.classList.toggle('menu-open', s.classList.contains('open'));
+  };
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 900) document.body.classList.remove('menu-open');
+  });
 
   // Bibliografía
   $('#bibBtn').onclick = () => {

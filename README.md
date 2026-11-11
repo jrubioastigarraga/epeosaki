@@ -107,6 +107,16 @@ Con sesión iniciada, cada pregunta tiene dos acciones:
 
 Las confirmaciones son públicas (cualquier visitante ve el estado agregado), pero solo los usuarios registrados pueden confirmar. Las políticas RLS impiden leer o modificar confirmaciones ajenas.
 
+### Qué ocurre con «No es correcta»
+
+Marcar **No es correcta** **no cambia la respuesta automáticamente**. Se guarda como una discrepancia con:
+
+- La opción que el usuario cree correcta.
+- Un comentario opcional.
+- El usuario y la fecha.
+
+El administrador las revisa en **Panel de administración → Confirmaciones → Discrepancias**. Ahí aparecen la respuesta actual, la opción propuesta, el comentario y un botón **Ver pregunta**. Las discrepancias no modifican el dataset por sí solas; si la corrección es válida, hay que actualizar la respuesta en los datos.
+
 El progreso (preguntas respondidas) se guarda en `localStorage` y, si hay sesión, también en Supabase. Al iniciar sesión se combinan ambos y se sincronizan.
 
 ---
