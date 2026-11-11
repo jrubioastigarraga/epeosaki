@@ -34,6 +34,8 @@ Además, la aplicación se conecta a **Supabase** para tener:
    - `attempts`: progreso de cada usuario.
    - funciones `is_admin()`, `question_confirmation_stats()`, trigger de alta de perfil y políticas RLS.
 
+> En este repositorio ya está ejecutado sobre el proyecto `ope_ana` (`idydmepueznvspefottp`).
+
 ### 1.3 Copiar las claves
 
 En **Project Settings → API** copia:
@@ -50,6 +52,8 @@ window.OPE_CONFIG = {
 };
 ```
 
+> En este repositorio `config.js` ya contiene la URL y la clave anon del proyecto `ope_ana`. Si usas otro proyecto, sustituye esos dos valores.
+
 > La clave `anon` es pública y puede estar en el navegador; la seguridad la ponen las políticas RLS. **Nunca** pongas la clave `service_role` en el frontend.
 
 ### 1.4 Configurar el login por email
@@ -59,6 +63,8 @@ En **Authentication → Providers → Email**:
 - Deja habilitado **Email**.
 - Para probar rápido, desactiva **Confirm email** (los usuarios podrán entrar sin confirmar el correo).
 - Si mantienes la confirmación por email, en **Authentication → URL Configuration** pon la URL de tu web en **Site URL** y añádela también en **Redirect URLs** (por ejemplo `https://tu-usuario.github.io/ope-ana-web/`).
+
+> En `ope_ana` ya está configurado: **Site URL** = `https://jrubioastigarraga.github.io/ope-ana-web/`, la URL de GitHub Pages está en **Redirect URLs** y **Confirm email** está desactivado para que el registro sea inmediato.
 
 ### 1.5 Crear el primer administrador
 
