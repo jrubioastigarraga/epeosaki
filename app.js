@@ -621,7 +621,15 @@
         $('#userMenu').hidden = true;
         if (SB) await SB.auth.signOut();
         session = null; profile = null; myConf = {}; confirmStats = {};
-        renderAuthUI(); renderAll(false);
+        // No dejar intentos del usuario anterior en el navegador.
+        store.groups = [];
+        store.active = { comun: null, fem: null };
+        store.owner = null;
+        state.reviewGroupId = null;
+        save();
+        renderAuthUI();
+        renderAttemptSelect();
+        renderAll(false);
         toast('Sesión cerrada', 'ok');
       };
     } else {
