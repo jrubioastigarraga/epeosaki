@@ -1,0 +1,1109 @@
+(function () {
+  'use strict';
+
+  // ============================================================
+  //  Datos embebidos
+  // ============================================================
+  const RAW = JSON.parse(document.getElementById('dataset').textContent);
+  const FUENTES = RAW.fuentes || [];
+  const BATS = {
+    comun: { data: RAW.comun, label: 'Batería común', sub: 'Temario común · 200 preguntas' },
+    fem: { data: RAW.fem, label: 'FEM Enfermedades Infecciosas', sub: 'Temario específico · 500 preguntas' }
+  };
+
+  const questions = {};
+  for (const k of Object.keys(BATS)) {
+    for (const q of BATS[k].data.preguntas) {
+      questions[k + '-' + q.numero] = Object.assign({ uid: k + '-' + q.numero, bat: k }, q);
+    }
+  }
+
+  // ============================================================
+  //  Utilidades
+  // ============================================================
+  const $ = (s) => document.querySelector(s);
+  const el = (t, c, h) => { const n = document.createElement(t); if (c) n.className = c; if (h != null) n.innerHTML = h; return n; };
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+  const norm = (s) => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const LS = 'ope-ana-v1';
+  const CONFIG = window.OPE_CONFIG || {};
+  const HAS_CONFIG = !!(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY &&
+    !/TU-PROYECTO|TU-ANON-KEY/i.test(CONFIG.SUPABASE_URL + ' ' + CONFIG.SUPABASE_ANON_KEY));
+
+  // ============================================================
+  //  Agrupación de casos clínicos (FEM 451-500)
+  // ============================================================
+  const cases = {};
+  for (const q of RAW.fem.preguntas) {
+    if (q.caso == null) continue;
+    const c = cases[q.caso] || (cases[q.caso] = { id: q.caso, questions: [], contexto: '' });
+    c.questions.push(questions['fem-' + q.numero]);
+  }
+  for (const c of Object.values(cases)) {
+    c.questions.sort((a, b) => a.numero - b.numero);
+    c.desde = c.questions[0].numero;
+    c.hasta = c.questions[c.questions.length - 1].numero;
+    c.contexto = cleanCaseContext(c.questions);
+  }
+
+  // En el dataset original, la última opción de algunos casos arrastra el
+  // enunciado del caso siguiente. Lo recortamos para no mostrar texto ajeno.
+  const caseStarts = Object.values(cases)
+    .map(c => ({ id: c.id, text: c.contexto.slice(0, 60) }))
+    .filter(x => x.text.length > 20);
+  for (const q of Object.values(questions)) {
+    if (!q.opciones) continue;
+    for (const k of Object.keys(q.opciones)) {
+      const v = q.opciones[k];
+      for (const c of caseStarts) {
+        if (c.id === q.caso) continue;
+        const i = v.indexOf(c.text);
+        if (i > 0) { q.opciones[k] = v.slice(0, i).trim(); break; }
+      }
+    }
+  }
+
+  // El campo `contexto` de los casos incluye el enunciado + todas las preguntas
+  // y opciones del caso. Para mostrar el caso agrupado dejamos solo el enunciado.
+  function cleanCaseContext(qs) {
+    const ctx = String(qs[0].contexto || '').trim();
+    if (!ctx) return '';
+    const words = String(qs[0].pregunta || '').trim().split(/\s+/).slice(0, 10)
+      .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    if (words.length) {
+      try {
+        const m = new RegExp(words.join('\\s+'), 'i').exec(ctx);
+        if (m && m.index > 40) return ctx.slice(0, m.index).replace(/\s*\d+\s*\.\s*-\s*$/, '').trim();
+      } catch (e) { /* expresión no válida: seguimos con el texto completo */ }
+    }
+    const m2 = ctx.search(new RegExp('\\b' + qs[0].numero + '\\.\\s*-'));
+    if (m2 > 40) return ctx.slice(0, m2).replace(/\s*\d+\s*\.\s*-\s*$/, '').trim();
+    return ctx;
+  }
+
+  const unitCache = {};
+  function unitsFor(bat) {
+    if (unitCache[bat]) return unitCache[bat];
+    const list = [];
+    const seen = new Set();
+    const arr = Object.values(questions).filter(q => q.bat === bat).sort((a, b) => a.numero - b.numero);
+    for (const q of arr) {
+      if (bat === 'fem' && q.caso != null) {
+        if (seen.has(q.caso)) continue;
+        seen.add(q.caso);
+        const c = cases[q.caso];
+        list.push({ type: 'case', id: c.id, order: c.desde, desde: c.desde, hasta: c.hasta, questions: c.questions });
+      } else {
+        list.push({ type: 'q', uid: q.uid, order: q.numero, questions: [q] });
+      }
+    }
+    unitCache[bat] = list;
+    return list;
+  }
+  const unitKey = (u) => u.type === 'case' ? 'case-' + u.id : u.uid;
+  function unitForUid(uid) {
+    const q = questions[uid];
+    if (!q) return null;
+    return unitsFor(q.bat).find(u => u.questions.includes(q)) || null;
+  }
+
+  function topicOf(q) {
+    if (q.tema) return q.tema;
+    if (q.caso != null) return 'Casos clínicos';
+    return q.bat === 'fem' ? 'FEM · general' : 'General';
+  }
+
+  // ============================================================
+  //  Estado local (progreso de respuestas)
+  // ============================================================
+  let store = { answers: {} };
+  try { const s = JSON.parse(localStorage.getItem(LS) || 'null'); if (s && s.answers) store = s; } catch (e) { /* almacenamiento no disponible */ }
+  const save = () => { try { localStorage.setItem(LS, JSON.stringify(store)); } catch (e) { /* almacenamiento no disponible */ } };
+
+  const state = {
+    bat: 'comun',
+    uid: 'comun-1',
+    view: 'q',        // 'q' | 'case'
+    caseId: null,
+    text: '',
+    status: 'all',
+    conf: 'all',
+    topic: 'all',
+    shuffle: null
+  };
+
+  // ============================================================
+  //  Supabase: sesión, perfil, confirmaciones, progreso
+  // ============================================================
+  let SB = null;
+  let session = null;
+  let profile = null;
+  let confirmStats = {};   // question_uid -> { confirms, disputes, confirmers, last_at }
+  let myConf = {};         // question_uid -> fila de confirmación del usuario
+  let authMode = 'login';
+  let disputeUid = null;
+  let adminTab = 'users';
+
+  function toast(msg, type) {
+    let t = $('#toast');
+    if (!t) { t = el('div'); t.id = 'toast'; document.body.appendChild(t); }
+    t.className = 'toast' + (type ? ' ' + type : '');
+    t.textContent = msg;
+    t.hidden = false;
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { t.hidden = true; }, 4200);
+  }
+  toast._t = null;
+
+  function authError(err) {
+    const m = String((err && err.message) || '').toLowerCase();
+    if (m.includes('invalid login')) return 'Email o contraseña incorrectos.';
+    if (m.includes('already registered') || m.includes('already been registered')) return 'Ese email ya tiene una cuenta. Prueba a iniciar sesión.';
+    if (m.includes('password should be')) return 'La contraseña debe tener al menos 6 caracteres.';
+    if (m.includes('email not confirmed')) return 'Debes confirmar tu email antes de entrar. Revisa tu correo.';
+    if (m.includes('rate limit')) return 'Demasiados intentos. Espera unos minutos y vuelve a probar.';
+    if (m.includes('unable to validate email')) return 'El email no es válido.';
+    return (err && err.message) ? err.message : 'No se ha podido completar la operación.';
+  }
+
+  const fmtDate = (s) => {
+    try { return new Date(s).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }); }
+    catch (e) { return String(s || ''); }
+  };
+
+  async function initSupabase() {
+    if (!HAS_CONFIG) { showSetupBanner('local'); return; }
+    if (!window.supabase) { showSetupBanner('cdn'); return; }
+    try {
+      SB = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, {
+        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+      });
+      const { data } = await SB.auth.getSession();
+      await setSession(data.session || null);
+      SB.auth.onAuthStateChange((event, sess) => {
+        if (event === 'SIGNED_OUT') { setSession(null); return; }
+        if (sess && (!session || sess.user.id !== session.user.id)) setTimeout(() => setSession(sess), 0);
+      });
+    } catch (e) {
+      console.error('[supabase]', e);
+      toast('No se pudo conectar con Supabase. Revisa config.js y el SQL.', 'err');
+    }
+  }
+
+  function showSetupBanner(reason) {
+    const b = $('#setupBanner');
+    if (!b) return;
+    b.hidden = false;
+    if (reason === 'cdn') b.querySelector('.banner-txt').textContent = 'No se ha podido cargar el cliente de Supabase. Comprueba que vendor/supabase.js se ha subido al servidor.';
+  }
+
+  async function setSession(sess) {
+    session = sess || null;
+    profile = null;
+    myConf = {};
+    if (!session) {
+      await loadConfirmationStats();
+      renderAuthUI();
+      renderAll(false);
+      return;
+    }
+    await Promise.all([loadProfile(), loadConfirmationStats(), loadMyConfirmations(), syncAttempts()]);
+    renderAuthUI();
+    renderAll(false);
+  }
+
+  async function loadProfile() {
+    if (!session || !SB) return;
+    try {
+      const { data, error } = await SB.from('profiles')
+        .select('id,email,display_name,role')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      if (!error && data) profile = data;
+    } catch (e) { /* la tabla puede no existir todavía */ }
+    if (!profile) {
+      const meta = session.user.user_metadata || {};
+      const email = session.user.email || '';
+      profile = {
+        id: session.user.id,
+        email,
+        display_name: meta.display_name || email.split('@')[0] || 'Usuario',
+        role: 'user'
+      };
+    }
+  }
+
+  async function loadConfirmationStats() {
+    if (!SB) return;
+    try {
+      const { data, error } = await SB.rpc('question_confirmation_stats');
+      if (error) { console.warn('[confirmaciones]', error.message); return; }
+      const map = {};
+      for (const r of data || []) map[r.question_uid] = r;
+      confirmStats = map;
+    } catch (e) { console.warn('[confirmaciones]', e); }
+  }
+
+  async function loadMyConfirmations() {
+    if (!SB || !session) return;
+    try {
+      const { data, error } = await SB.from('confirmations')
+        .select('question_uid,is_correct,suggested_answer,comment,created_at')
+        .eq('user_id', session.user.id);
+      if (error) { console.warn('[mis confirmaciones]', error.message); return; }
+      const map = {};
+      for (const r of data || []) map[r.question_uid] = r;
+      myConf = map;
+    } catch (e) { console.warn('[mis confirmaciones]', e); }
+  }
+
+  async function syncAttempts() {
+    if (!SB || !session) return;
+    try {
+      // Aislamiento en dispositivos compartidos: el progreso local pertenece
+      // al último usuario que inició sesión. Si entra otra cuenta, no se
+      // mezclan sus respuestas.
+      if (store.owner && store.owner !== session.user.id) {
+        store.answers = {};
+        save();
+      }
+      store.owner = session.user.id;
+      save();
+      const { data, error } = await SB.from('attempts')
+        .select('question_uid,pick,is_correct,answered_at')
+        .eq('user_id', session.user.id);
+      if (error) { console.warn('[progreso]', error.message); return; }
+      let changed = false;
+      for (const r of data || []) {
+        if (!questions[r.question_uid]) continue;
+        const ts = Date.parse(r.answered_at) || 0;
+        const local = store.answers[r.question_uid];
+        if (!local || (local.ts || 0) < ts) {
+          store.answers[r.question_uid] = { pick: r.pick, ok: !!r.is_correct, ts };
+          changed = true;
+        }
+      }
+      if (changed) save();
+      const rows = Object.entries(store.answers)
+        .filter(([uid]) => questions[uid])
+        .map(([uid, a]) => ({
+          user_id: session.user.id,
+          question_uid: uid,
+          pick: a.pick,
+          is_correct: !!a.ok,
+          answered_at: new Date(a.ts || Date.now()).toISOString()
+        }));
+      if (rows.length) {
+        const { error: e2 } = await SB.from('attempts').upsert(rows, { onConflict: 'user_id,question_uid' });
+        if (e2) console.warn('[progreso]', e2.message);
+      }
+      updateStats();
+    } catch (e) { console.warn('[progreso]', e); }
+  }
+
+  // ============================================================
+  //  Autenticación (UI)
+  // ============================================================
+  function renderAuthUI() {
+    const box = $('#authBox');
+    if (!box) return;
+    if (!HAS_CONFIG) {
+      box.innerHTML = '<button class="btn" id="authBtn" type="button" title="Configura Supabase para activar el registro y las confirmaciones">Iniciar sesión</button>';
+      $('#authBtn').onclick = () => openAuth();
+      return;
+    }
+    if (session) {
+      const name = (profile && profile.display_name) || session.user.email || 'Usuario';
+      const initial = String(name).trim().charAt(0) || 'U';
+      const isAdmin = profile && profile.role === 'admin';
+      box.innerHTML = `
+        <button class="userchip" id="userChip" type="button" title="${esc(session.user.email || '')}">
+          <span class="avatar">${esc(initial)}</span>
+          <span class="uname">${esc(name)}</span>
+          ${isAdmin ? '<span class="role">admin</span>' : ''}
+        </button>
+        <div class="user-menu" id="userMenu" hidden>
+          <div class="um-head">${esc(session.user.email || '')}</div>
+          ${isAdmin ? '<button type="button" id="adminBtn">Panel de administración</button>' : ''}
+          <button type="button" id="logoutBtn">Cerrar sesión</button>
+        </div>`;
+      $('#userChip').onclick = (e) => { e.stopPropagation(); const m = $('#userMenu'); m.hidden = !m.hidden; };
+      if (isAdmin) $('#adminBtn').onclick = () => { $('#userMenu').hidden = true; openAdmin(); };
+      $('#logoutBtn').onclick = async () => {
+        $('#userMenu').hidden = true;
+        if (SB) await SB.auth.signOut();
+        session = null; profile = null; myConf = {}; confirmStats = {};
+        renderAuthUI(); renderAll(false);
+        toast('Sesión cerrada', 'ok');
+      };
+    } else {
+      box.innerHTML = '<button class="btn primary" id="authBtn" type="button">Iniciar sesión</button>';
+      $('#authBtn').onclick = () => openAuth();
+    }
+  }
+
+  function openAuth() {
+    if (!HAS_CONFIG || !SB) {
+      toast('Supabase no está disponible. Revisa config.js y vendor/supabase.js (ver README).', 'err');
+      return;
+    }
+    setAuthMode('login');
+    $('#authMsg').textContent = '';
+    $('#authModal').classList.add('open');
+    setTimeout(() => { const e = $('#authEmail'); if (e) e.focus(); }, 40);
+  }
+
+  function setAuthMode(mode) {
+    authMode = mode;
+    const signup = mode === 'signup';
+    document.querySelectorAll('[data-auth]').forEach(t => t.classList.toggle('on', t.dataset.auth === mode));
+    $('#authTitle').textContent = signup ? 'Crear cuenta' : 'Iniciar sesión';
+    $('#authSubmit').textContent = signup ? 'Crear cuenta' : 'Entrar';
+    $('#nameField').hidden = !signup;
+    $('#authPass').autocomplete = signup ? 'new-password' : 'current-password';
+    $('#authMsg').textContent = '';
+    $('#authMsg').className = 'auth-msg';
+  }
+
+  function setAuthMsg(msg, cls) {
+    const n = $('#authMsg');
+    n.textContent = msg || '';
+    n.className = 'auth-msg' + (cls ? ' ' + cls : '');
+  }
+
+  async function onAuthSubmit(e) {
+    e.preventDefault();
+    if (!SB) return;
+    const email = $('#authEmail').value.trim();
+    const pass = $('#authPass').value;
+    const name = $('#authName').value.trim();
+    const btn = $('#authSubmit');
+    btn.disabled = true;
+    setAuthMsg('');
+    try {
+      if (authMode === 'signup') {
+        const { data, error } = await SB.auth.signUp({
+          email,
+          password: pass,
+          options: { data: { display_name: name || email.split('@')[0] } }
+        });
+        if (error) throw error;
+        if (data.session) {
+          $('#authModal').classList.remove('open');
+          toast('Cuenta creada. ¡Bienvenido!', 'ok');
+        } else {
+          setAuthMsg('Cuenta creada. Revisa tu correo para confirmarla y después inicia sesión.', 'ok');
+        }
+      } else {
+        const { error } = await SB.auth.signInWithPassword({ email, password: pass });
+        if (error) throw error;
+        $('#authModal').classList.remove('open');
+        toast('Sesión iniciada', 'ok');
+      }
+    } catch (err) {
+      setAuthMsg(authError(err), 'err');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ============================================================
+  //  Confirmaciones
+  // ============================================================
+  async function confirmAnswer(uid) {
+    if (!session) return openAuth();
+    const { error } = await SB.from('confirmations').upsert({
+      user_id: session.user.id,
+      question_uid: uid,
+      is_correct: true,
+      suggested_answer: null,
+      comment: null
+    }, { onConflict: 'question_uid,user_id' });
+    if (error) { toast('No se pudo guardar la confirmación: ' + error.message, 'err'); return; }
+    toast('Respuesta confirmada. ¡Gracias!', 'ok');
+    await Promise.all([loadConfirmationStats(), loadMyConfirmations()]);
+    renderAll(true);
+  }
+
+  async function withdrawConfirmation(uid) {
+    if (!session) return;
+    const { error } = await SB.from('confirmations').delete()
+      .eq('question_uid', uid).eq('user_id', session.user.id);
+    if (error) { toast('No se pudo retirar: ' + error.message, 'err'); return; }
+    toast('Confirmación retirada', 'ok');
+    await Promise.all([loadConfirmationStats(), loadMyConfirmations()]);
+    renderAll(true);
+  }
+
+  function openDispute(uid) {
+    if (!session) return openAuth();
+    const q = questions[uid];
+    if (!q) return;
+    disputeUid = uid;
+    $('#disputeQ').innerHTML = `<b>Pregunta ${q.numero}.</b> ${esc(q.pregunta)}`;
+    $('#disputeOpts').innerHTML = Object.entries(q.opciones).map(([k, v]) =>
+      `<label class="disopt"><input type="radio" name="disopt" value="${k}"><span><b>${k})</b> ${esc(v)}</span></label>`
+    ).join('');
+    $('#disputeComment').value = '';
+    $('#disputeMsg').textContent = '';
+    $('#disputeModal').classList.add('open');
+  }
+
+  async function submitDispute() {
+    if (!session || !disputeUid) return;
+    const picked = document.querySelector('input[name="disopt"]:checked');
+    if (!picked) { $('#disputeMsg').textContent = 'Selecciona la opción que crees que es correcta.'; return; }
+    const comment = $('#disputeComment').value.trim() || null;
+    const btn = $('#disputeSubmit');
+    btn.disabled = true;
+    const { error } = await SB.from('confirmations').upsert({
+      user_id: session.user.id,
+      question_uid: disputeUid,
+      is_correct: false,
+      suggested_answer: picked.value,
+      comment
+    }, { onConflict: 'question_uid,user_id' });
+    btn.disabled = false;
+    if (error) { $('#disputeMsg').textContent = 'No se pudo guardar: ' + error.message; return; }
+    $('#disputeModal').classList.remove('open');
+    toast('Gracias. Tu corrección queda registrada para revisión.', 'ok');
+    await Promise.all([loadConfirmationStats(), loadMyConfirmations()]);
+    renderAll(true);
+  }
+
+  function confirmBadges(q) {
+    const st = confirmStats[q.uid] || {};
+    const n = st.confirms || 0;
+    const d = st.disputes || 0;
+    const mine = myConf[q.uid];
+    let html = '';
+    if (n > 0) {
+      const names = (st.confirmers || []).filter(Boolean);
+      const extra = n > names.length ? ` y ${n - names.length} más` : '';
+      const title = names.length ? `Confirmada por: ${names.join(', ')}${extra}` : `Confirmada por ${n} usuario(s)`;
+      html += `<span class="tag conf-ok" title="${esc(title)}">&#10003; Confirmada por ${n} usuario${n === 1 ? '' : 's'}</span>`;
+    } else {
+      html += '<span class="tag conf-none">Sin confirmar</span>';
+    }
+    if (d > 0) {
+      html += `<span class="tag conf-bad" title="${esc(d + ' usuario(s) creen que la respuesta es incorrecta')}">&#9888; ${d} en desacuerdo</span>`;
+    }
+    if (mine && mine.is_correct) html += '<span class="tag conf-me">Tu confirmación</span>';
+    return html;
+  }
+
+  function confirmRow(q) {
+    if (!HAS_CONFIG) return '';
+    const st = confirmStats[q.uid] || {};
+    const mine = myConf[q.uid];
+    if (!session) {
+      return `<div class="confirm-row">
+        <span class="confirm-hint">Inicia sesión para confirmar si esta respuesta es correcta.</span>
+        <button class="btn" type="button" data-auth-open="1">Iniciar sesión</button>
+      </div>`;
+    }
+    if (mine && mine.is_correct) {
+      return `<div class="confirm-row">
+        <span class="confirm-done">&#10003; Has confirmado esta respuesta como correcta</span>
+        <button class="btn ghost" type="button" data-unconfirm="${q.uid}">Retirar</button>
+      </div>`;
+    }
+    if (mine && !mine.is_correct) {
+      return `<div class="confirm-row">
+        <span class="confirm-done bad">&#9888; Has indicado que la respuesta correcta es <b>${esc(mine.suggested_answer || '?')})</b></span>
+        <button class="btn ghost" type="button" data-unconfirm="${q.uid}">Retirar</button>
+      </div>`;
+    }
+    const count = st.confirms ? `<span class="confirm-count">${st.confirms} confirmación${st.confirms === 1 ? '' : 'es'} de otros usuarios</span>` : '';
+    return `<div class="confirm-row">
+      <button class="btn confirm" type="button" data-confirm="${q.uid}">&#10003; Confirmar respuesta correcta</button>
+      <button class="btn ghost" type="button" data-dispute="${q.uid}">No es correcta</button>
+      ${count}
+    </div>`;
+  }
+
+  // ============================================================
+  //  Lista lateral y filtros
+  // ============================================================
+  function matchesFilters(unit) {
+    const st = state;
+    if (st.topic !== 'all') {
+      const topics = new Set(unit.questions.map(topicOf));
+      if (!topics.has(st.topic)) return false;
+    }
+    if (st.status !== 'all') {
+      const has = unit.questions.some(q => {
+        const a = store.answers[q.uid];
+        if (st.status === 'pending') return !a;
+        if (st.status === 'wrong') return a && !a.ok;
+        if (st.status === 'right') return a && a.ok;
+        return true;
+      });
+      if (!has) return false;
+    }
+    if (st.conf !== 'all') {
+      const has = unit.questions.some(q => {
+        const c = q.confidence || 0;
+        if (st.conf === 'hi') return c >= 80;
+        if (st.conf === 'mid') return c >= 60 && c < 80;
+        return c < 60;
+      });
+      if (!has) return false;
+    }
+    if (st.text.trim()) {
+      const t = norm(st.text);
+      let hay = unit.questions.map(q =>
+        norm(String(q.numero)) + ' ' + norm(q.pregunta) + ' ' +
+        Object.values(q.opciones || {}).map(norm).join(' ') + ' ' + norm(q.tema || '')
+      ).join(' ');
+      if (unit.type === 'case') hay += ' ' + norm(cases[unit.id].contexto);
+      if (!hay.includes(t)) return false;
+    }
+    return true;
+  }
+
+  function poolUnits() {
+    let arr = unitsFor(state.bat).filter(matchesFilters);
+    if (state.shuffle) {
+      const pos = new Map(state.shuffle.map((u, i) => [u, i]));
+      arr = arr.slice().sort((a, b) => {
+        const pa = pos.has(unitKey(a)) ? pos.get(unitKey(a)) : 1e9;
+        const pb = pos.has(unitKey(b)) ? pos.get(unitKey(b)) : 1e9;
+        return pa - pb;
+      });
+    }
+    return arr;
+  }
+
+  function currentUnitKey() {
+    return state.view === 'case' ? 'case-' + state.caseId : state.uid;
+  }
+
+  function renderTopics() {
+    const sel = $('#fTopic');
+    const topics = [...new Set(Object.values(questions).filter(q => q.bat === state.bat).map(topicOf))].sort();
+    sel.innerHTML = '<option value="all">Todos los temas</option>' +
+      topics.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+    if (!topics.includes(state.topic)) state.topic = 'all';
+    sel.value = state.topic;
+  }
+
+  function stats() {
+    const all = Object.values(questions).filter(q => q.bat === state.bat);
+    let done = 0, ok = 0;
+    for (const q of all) { const a = store.answers[q.uid]; if (a) { done++; if (a.ok) ok++; } }
+    return { total: all.length, done, ok };
+  }
+
+  function updateStats() {
+    const s = stats();
+    $('#statDone').textContent = s.done + '/' + s.total;
+    $('#statOK').textContent = s.done ? Math.round(s.ok * 100 / s.done) + '%' : '0%';
+    $('#bar').style.width = (s.done * 100 / s.total) + '%';
+  }
+
+  function renderList() {
+    const arr = poolUnits();
+    const box = $('#qlist');
+    box.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    for (const u of arr) {
+      const cur = unitKey(u) === currentUnitKey();
+      if (u.type === 'case') {
+        const answered = u.questions.filter(q => store.answers[q.uid]).length;
+        const allDone = answered === u.questions.length;
+        const anyDone = answered > 0;
+        const anyWrong = u.questions.some(q => { const a = store.answers[q.uid]; return a && !a.ok; });
+        const allCorrect = allDone && !anyWrong;
+        const allConf = u.questions.every(q => (confirmStats[q.uid] || {}).confirms > 0);
+        const stateCls = allDone ? (allCorrect ? ' ok' : ' bad') : (anyWrong ? ' bad' : '');
+        const dotCls = allDone || anyWrong ? '' : (anyDone ? ' part' : '');
+        const b = el('button', 'qitem caseitem' + stateCls + (cur ? ' cur' : ''));
+        b.innerHTML = `<span class="dot${dotCls}"></span>` +
+          `<span class="casename">Caso ${u.id}</span><small>${u.desde}&ndash;${u.hasta}</small>` +
+          (allConf ? '<span class="confmark" title="Todas las preguntas confirmadas">&#10003;</span>' : '');
+        b.title = `Caso clínico ${u.id} · preguntas ${u.desde}-${u.hasta}` +
+          (answered ? ` · ${answered}/${u.questions.length} respondidas` : '') +
+          (anyWrong ? ' · con fallos' : '');
+        b.onclick = () => { goUnit(u); closeSidebar(); };
+        frag.appendChild(b);
+      } else {
+        const q = u.questions[0];
+        const a = store.answers[q.uid];
+        const confirmed = (confirmStats[q.uid] || {}).confirms > 0;
+        const b = el('button', 'qitem' + (a ? (a.ok ? ' ok' : ' bad') : '') + (cur ? ' cur' : '') + (confirmed ? ' confirmed' : ''));
+        b.innerHTML = `<span class="dot"></span>${q.numero}`;
+        b.title = q.pregunta.slice(0, 90) + (confirmed ? ' · Respuesta confirmada' : '');
+        b.onclick = () => { go(q.uid); closeSidebar(); };
+        frag.appendChild(b);
+      }
+    }
+    box.appendChild(frag);
+    const totalQ = arr.reduce((n, u) => n + u.questions.length, 0);
+    const nCases = arr.filter(u => u.type === 'case').length;
+    $('#viewCount').textContent = totalQ + ' pregunta' + (totalQ === 1 ? '' : 's') + (nCases ? ' · ' + nCases + ' caso' + (nCases === 1 ? '' : 's') : '');
+    const cur = box.querySelector('.cur');
+    if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' });
+  }
+
+  // ============================================================
+  //  Tarjeta principal
+  // ============================================================
+  function confidenceBadge(c) {
+    const cls = c >= 80 ? 'conf-hi' : c >= 60 ? 'conf-mid' : 'conf-low';
+    return `<span class="tag ${cls}">Seguridad ${c}%</span>`;
+  }
+
+  function sourceHtml(q) {
+    const s = q.source || {};
+    if (!s.documento && !s.extracto) return '';
+    const refDiff = s.referencia && s.referencia !== s.documento;
+    const qq = encodeURIComponent((s.documento || '') + ' ' + (s.referencia || ''));
+    const esGuia = /bib\.\s*(8|11|12)\b/.test(s.documento || '');
+    const searchUrl = 'https://www.google.com/search?q=' + qq + (esGuia ? '' : '&tbm=bks');
+    return `<div class="source show">
+      <h4>Dónde está la respuesta</h4>
+      <div class="doc">${esc(s.documento || '')}</div>
+      ${refDiff ? `<div class="ref">${esc(s.referencia)}</div>` : ''}
+      ${s.extracto ? `<blockquote>${esc(s.extracto)}</blockquote>` : ''}
+      ${s.linea ? `<div class="lines">Archivo: ${esc(s.texto || s.archivo || '')} &middot; línea ${s.linea}${s.linea_fin && s.linea_fin !== s.linea ? '&ndash;' + s.linea_fin : ''}</div>` : ''}
+      <div class="src-actions">
+        ${s.visor ? `<a class="btn" href="${esc(s.visor)}" target="_blank" rel="noopener">Abrir texto${s.linea ? ' (línea ' + s.linea + ')' : ''}</a>` : ''}
+        ${s.pdf ? `<a class="btn" href="${esc(s.pdf)}" target="_blank" rel="noopener">Abrir PDF</a>` : ''}
+        ${s.url ? `<a class="btn" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.urlLabel || 'Consultar fuente')}</a>` : (!s.disponible ? `<a class="btn" href="${searchUrl}" target="_blank" rel="noopener">Buscar esta referencia</a>` : '')}
+      </div>
+      ${!s.disponible ? '<div class="lines">El texto completo no está disponible en local: es un libro o recurso con copyright. Se indica la referencia y el tema donde se encuentra.</div>' : ''}
+      ${(q.confidence || 0) < 60 ? '<div class="lines">&#9888; Respuesta de baja seguridad: conviene verificarla en la fuente original.</div>' : ''}
+    </div>`;
+  }
+
+  function questionHtml(q, opts) {
+    opts = opts || {};
+    const a = store.answers[q.uid];
+    const entries = Object.entries(q.opciones || {});
+    let html = `<div class="qhead">
+      <span class="num">Pregunta ${q.numero}</span>
+      ${opts.caseView ? '' : `<span class="tag">${esc(topicOf(q))}</span>`}
+      ${confirmBadges(q)}
+      ${a ? confidenceBadge(q.confidence || 0) : '<span class="tag">Respuesta deducida · no oficial</span>'}
+    </div>`;
+
+    if (q.contexto && !opts.caseView) {
+      html += `<div class="case"><b>Caso clínico ${q.caso || ''}</b><div class="txt">${esc(q.contexto)}</div></div>`;
+    }
+    html += `<h2 class="question">${esc(q.pregunta)}</h2>`;
+    html += '<div class="options">' + entries.map(([k, v]) => {
+      let cls = 'opt';
+      if (a) {
+        if (k === q.answer) cls += ' correct';
+        else if (k === a.pick) cls += ' wrong';
+        else cls += ' dim';
+      }
+      return `<button class="${cls}" type="button" data-k="${k}" data-uid="${q.uid}" ${a ? 'disabled' : ''}><span class="k">${k}</span><span class="t">${esc(v)}</span></button>`;
+    }).join('') + '</div>';
+
+    if (a) {
+      const ok = a.pick === q.answer;
+      html += `<div class="feedback show ${ok ? 'ok' : 'bad'}">${ok ? '&#10003; Correcto' : '&#10007; Incorrecto'}
+        <small>Respuesta correcta: <b>${String(q.answer).toLowerCase()})</b> ${esc(q.opciones[q.answer])}</small></div>`;
+      html += sourceHtml(q);
+      if (q.notas) html += `<div class="notes">${esc(q.notas)}</div>`;
+    }
+    html += confirmRow(q);
+    return html;
+  }
+
+  function navHtml() {
+    const arr = poolUnits();
+    const key = currentUnitKey();
+    const idx = arr.findIndex(u => unitKey(u) === key);
+    const cur = idx >= 0 ? arr[idx] : null;
+    const label = cur && cur.type === 'case'
+      ? `Caso ${cur.id} · preguntas ${cur.desde}&ndash;${cur.hasta}`
+      : '';
+    return `<div class="nav">
+      <button class="btn" id="prevBtn" type="button" ${idx <= 0 ? 'disabled' : ''}>&larr; Anterior</button>
+      <span class="mid">${idx >= 0 ? (idx + 1) + ' de ' + arr.length : ''}${label ? ' &middot; ' + label : ''}</span>
+      <button class="btn primary" id="nextBtn" type="button" ${idx < 0 || idx >= arr.length - 1 ? 'disabled' : ''}>Siguiente &rarr;</button>
+    </div>`;
+  }
+
+  function caseHtml(c) {
+    const answered = c.questions.filter(q => store.answers[q.uid]).length;
+    const confirmed = c.questions.filter(q => (confirmStats[q.uid] || {}).confirms > 0).length;
+    let html = `<div class="case-head">
+      <span class="num">Caso clínico ${c.id}</span>
+      <span class="tag">Preguntas ${c.desde}&ndash;${c.hasta}</span>
+      <span class="tag">${answered}/${c.questions.length} respondidas</span>
+      <span class="tag ${confirmed ? 'conf-ok' : 'conf-none'}">${confirmed ? '&#10003; ' + confirmed + ' confirmada' + (confirmed === 1 ? '' : 's') : 'Sin confirmar'}</span>
+    </div>`;
+    if (c.contexto) {
+      html += `<div class="case case-full"><b>Enunciado del caso</b><div class="txt">${esc(c.contexto)}</div></div>`;
+    }
+    html += `<div class="case-progress">Responde a todas las preguntas del caso. Puedes confirmar cada respuesta por separado.</div>`;
+    html += c.questions.map(q => `<section class="case-sub" data-uid="${q.uid}">${questionHtml(q, { caseView: true })}</section>`).join('');
+    html += navHtml();
+    return html;
+  }
+
+  function renderCard(preserveScroll) {
+    const y = preserveScroll ? window.scrollY : 0;
+    const card = $('#card');
+    if (state.view === 'case') {
+      const c = cases[state.caseId];
+      if (!c) { card.innerHTML = '<div class="empty">Caso clínico no encontrado.</div>'; return; }
+      card.innerHTML = caseHtml(c);
+    } else {
+      const q = questions[state.uid];
+      if (!q) {
+        card.innerHTML = '<div class="empty">No hay preguntas con los filtros seleccionados.</div>';
+        return;
+      }
+      card.innerHTML = questionHtml(q, { caseView: false }) + navHtml();
+    }
+    bindCard();
+    if (preserveScroll) requestAnimationFrame(() => { try { window.scrollTo(0, y); } catch (e) { /* navegador sin scroll */ } });
+  }
+
+  function bindCard() {
+    const card = $('#card');
+    card.querySelectorAll('.opt').forEach(b => {
+      b.onclick = () => answer(b.dataset.uid || state.uid, b.dataset.k);
+    });
+    card.querySelectorAll('[data-confirm]').forEach(b => { b.onclick = () => confirmAnswer(b.dataset.confirm); });
+    card.querySelectorAll('[data-dispute]').forEach(b => { b.onclick = () => openDispute(b.dataset.dispute); });
+    card.querySelectorAll('[data-unconfirm]').forEach(b => { b.onclick = () => withdrawConfirmation(b.dataset.unconfirm); });
+    card.querySelectorAll('[data-auth-open]').forEach(b => { b.onclick = () => openAuth(); });
+    const prev = $('#prevBtn'), next = $('#nextBtn');
+    if (prev) prev.onclick = () => jump(-1);
+    if (next) next.onclick = () => jump(1);
+  }
+
+  function renderAll(preserveScroll) {
+    renderCard(preserveScroll);
+    renderList();
+    updateStats();
+  }
+
+  // ============================================================
+  //  Navegación / respuestas
+  // ============================================================
+  function answer(uid, letter) {
+    const q = questions[uid];
+    if (!q || store.answers[uid]) return;
+    const ts = Date.now();
+    store.answers[uid] = { pick: letter, ok: letter === q.answer, ts };
+    save();
+    if (SB && session) {
+      SB.from('attempts').upsert({
+        user_id: session.user.id,
+        question_uid: uid,
+        pick: letter,
+        is_correct: letter === q.answer,
+        answered_at: new Date(ts).toISOString()
+      }, { onConflict: 'user_id,question_uid' }).then(({ error }) => {
+        if (error) console.warn('[progreso]', error.message);
+      });
+    }
+    renderAll(true);
+  }
+
+  function go(uid) {
+    const q = questions[uid];
+    if (!q) return;
+    state.uid = uid;
+    if (q.caso != null) { state.view = 'case'; state.caseId = q.caso; }
+    else { state.view = 'q'; state.caseId = null; }
+    try { history.replaceState(null, '', '#' + uid); } catch (e) { /* file:// */ }
+    renderCard(false);
+    renderList();
+  }
+
+  function goUnit(u) {
+    if (!u) return;
+    if (u.type === 'case') {
+      const pending = u.questions.find(q => !store.answers[q.uid]);
+      go((pending || u.questions[0]).uid);
+    } else {
+      go(u.uid);
+    }
+  }
+
+  function jump(d) {
+    const arr = poolUnits();
+    const idx = arr.findIndex(u => unitKey(u) === currentUnitKey());
+    if (idx < 0) return;
+    const n = arr[idx + d];
+    if (n) goUnit(n);
+  }
+
+  function closeSidebar() { $('#sidebar').classList.remove('open'); }
+
+  // ============================================================
+  //  Administración
+  // ============================================================
+  async function openAdmin() {
+    if (!session || !profile || profile.role !== 'admin') return;
+    adminTab = 'users';
+    document.querySelectorAll('[data-admin]').forEach(t => t.classList.toggle('on', t.dataset.admin === 'users'));
+    $('#adminModal').classList.add('open');
+    await renderAdmin();
+  }
+
+  async function renderAdmin() {
+    const body = $('#adminBody');
+    body.innerHTML = '<div class="empty">Cargando&hellip;</div>';
+    if (!SB) return;
+    if (adminTab === 'users') {
+      const { data, error } = await SB.from('profiles')
+        .select('id,email,display_name,role,created_at')
+        .order('created_at', { ascending: true });
+      if (error) { body.innerHTML = `<div class="empty">Error: ${esc(error.message)}</div>`; return; }
+      const rows = (data || []).map(u => {
+        const self = session && u.id === session.user.id;
+        return `<tr>
+          <td><div class="admin-name">${esc(u.display_name || '—')}</div><div class="admin-sub">${esc(u.email || '')}</div></td>
+          <td>${fmtDate(u.created_at)}</td>
+          <td>${self
+            ? `<span class="pill">${esc(u.role)}</span>`
+            : `<select data-role="${u.id}" data-old="${u.role}">
+                 <option value="user" ${u.role === 'user' ? 'selected' : ''}>usuario</option>
+                 <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option>
+               </select>`}</td>
+        </tr>`;
+      }).join('');
+      body.innerHTML = `<div class="table-wrap"><table class="admin">
+        <thead><tr><th>Usuario</th><th>Alta</th><th>Rol</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="3" class="empty-row">Sin usuarios</td></tr>'}</tbody>
+      </table></div>`;
+      body.querySelectorAll('select[data-role]').forEach(sel => {
+        sel.onchange = async () => {
+          const id = sel.dataset.role;
+          const role = sel.value;
+          sel.disabled = true;
+          const { error: e } = await SB.from('profiles').update({ role }).eq('id', id);
+          sel.disabled = false;
+          if (e) { sel.value = sel.dataset.old; toast('No se pudo cambiar el rol: ' + e.message, 'err'); return; }
+          sel.dataset.old = role;
+          toast('Rol actualizado', 'ok');
+          if (session && id === session.user.id) { await loadProfile(); renderAuthUI(); }
+        };
+      });
+    } else {
+      const [confRes, profRes] = await Promise.all([
+        SB.from('confirmations')
+          .select('id,question_uid,is_correct,suggested_answer,comment,created_at,user_id')
+          .order('created_at', { ascending: false })
+          .limit(1000),
+        SB.from('profiles').select('id,email,display_name')
+      ]);
+      if (confRes.error) { body.innerHTML = `<div class="empty">Error: ${esc(confRes.error.message)}</div>`; return; }
+      const data = confRes.data || [];
+      const byId = new Map((profRes.data || []).map(p => [p.id, p]));
+      const confs = data.filter(r => r.is_correct).length;
+      const disc = data.filter(r => !r.is_correct).length;
+      const rows = data.map(r => {
+        const q = questions[r.question_uid];
+        const p = byId.get(r.user_id);
+        const who = p ? (p.display_name || p.email) : r.user_id;
+        return `<tr>
+          <td><div class="admin-name">${q ? 'Pregunta ' + q.numero : esc(r.question_uid)}</div><div class="admin-sub">${esc(r.question_uid)}</div></td>
+          <td>${esc(who || '—')}</td>
+          <td>${r.is_correct ? '<span class="tag conf-ok">Confirma</span>' : '<span class="tag conf-bad">Discrepa</span>'}</td>
+          <td>${r.suggested_answer ? `<b>${esc(r.suggested_answer)})</b> ${esc(q && q.opciones ? q.opciones[r.suggested_answer] : '')}` : '—'}</td>
+          <td class="admin-comment">${esc(r.comment || '')}</td>
+          <td>${fmtDate(r.created_at)}</td>
+          <td><button class="btn admin-del" type="button" data-delconf="${r.id}">Eliminar</button></td>
+        </tr>`;
+      }).join('');
+      body.innerHTML = `<div class="admin-summary">${confs} confirmaciones · ${disc} discrepancias</div>
+        <div class="table-wrap"><table class="admin">
+        <thead><tr><th>Pregunta</th><th>Usuario</th><th>Tipo</th><th>Opción propuesta</th><th>Comentario</th><th>Fecha</th><th></th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="7" class="empty-row">Sin confirmaciones todavía</td></tr>'}</tbody>
+      </table></div>`;
+      body.querySelectorAll('[data-delconf]').forEach(b => {
+        b.onclick = async () => {
+          if (!confirm('¿Eliminar esta confirmación?')) return;
+          const { error: e } = await SB.from('confirmations').delete().eq('id', b.dataset.delconf);
+          if (e) { toast('No se pudo eliminar: ' + e.message, 'err'); return; }
+          toast('Confirmación eliminada', 'ok');
+          await loadConfirmationStats();
+          renderAll(true);
+          renderAdmin();
+        };
+      });
+    }
+  }
+
+  // ============================================================
+  //  Bibliografía
+  // ============================================================
+  function renderBib(text) {
+    const t = norm(text || '');
+    const arr = FUENTES.filter(f => !t || norm(f.titulo + ' ' + (f.ref || '')).includes(t));
+    const groups = { comun: 'Temario común', fem: 'Temario específico (FEM Enfermedades Infecciosas)' };
+    let html = '';
+    for (const g of ['comun', 'fem']) {
+      const items = arr.filter(f => f.grupo === g);
+      if (!items.length) continue;
+      html += `<div class="bib-group">${groups[g]}</div>`;
+      for (const f of items) {
+        const ok = f.estado === 'descargado';
+        html += `<div class="bib-item"><div class="bib-main">
+          <div class="bib-title">${esc(f.titulo)}</div>
+          <div class="bib-meta">${esc(f.ref || '')}${f.lineas ? ' &middot; ' + f.lineas + ' líneas' : ''}
+            <span class="pill ${ok ? '' : 'no'}">${ok ? 'descargado' : 'no disponible en local'}</span></div>
+          <div class="bib-links">
+            ${f.visor ? `<a href="${esc(f.visor)}" target="_blank" rel="noopener">Abrir texto</a>` : ''}
+            ${f.pdf ? `<a href="${esc(f.pdf)}" target="_blank" rel="noopener">PDF</a>` : ''}
+            ${f.url ? `<a href="${esc(f.url)}" target="_blank" rel="noopener">${ok ? 'Web oficial' : 'Buscar referencia'}</a>` : ''}
+          </div>
+        </div></div>`;
+      }
+    }
+    $('#bibBody').innerHTML = html || '<div class="empty">Sin resultados</div>';
+  }
+
+  // ============================================================
+  //  Eventos
+  // ============================================================
+  document.querySelectorAll('.tab[data-bat]').forEach(t => {
+    t.onclick = () => {
+      document.querySelectorAll('.tab[data-bat]').forEach(x => x.classList.remove('on'));
+      t.classList.add('on');
+      state.bat = t.dataset.bat;
+      state.topic = 'all'; state.status = 'all'; state.text = '';
+      state.view = 'q'; state.caseId = null;
+      $('#search').value = ''; $('#fStatus').value = 'all';
+      state.shuffle = null;
+      $('#subtitle').textContent = BATS[state.bat].sub;
+      renderTopics();
+      const arr = poolUnits();
+      if (arr.length) goUnit(arr[0]);
+      else { state.uid = state.bat + '-1'; renderAll(false); }
+    };
+  });
+
+  $('#search').oninput = e => { state.text = e.target.value; renderList(); };
+  $('#fStatus').onchange = e => { state.status = e.target.value; renderList(); };
+  $('#fConf').onchange = e => { state.conf = e.target.value; renderList(); };
+  $('#fTopic').onchange = e => { state.topic = e.target.value; renderList(); };
+
+  $('#shuffleBtn').onclick = () => {
+    const before = poolUnits();
+    state.shuffle = before.map(unitKey).sort(() => Math.random() - 0.5);
+    renderList();
+    const arr = poolUnits();
+    if (arr.length) goUnit(arr[0]);
+  };
+  $('#wrongOnlyBtn').onclick = () => {
+    state.status = 'wrong'; $('#fStatus').value = 'wrong'; renderList();
+    const arr = poolUnits();
+    if (arr.length) goUnit(arr[0]);
+    else alert('No hay preguntas falladas todavía.');
+  };
+  $('#clearBtn').onclick = async () => {
+    if (!confirm('¿Borrar todo el progreso guardado?')) return;
+    store = { answers: {} }; save();
+    if (SB && session) {
+      const { error } = await SB.from('attempts').delete().eq('user_id', session.user.id);
+      if (error) toast('Progreso borrado en este dispositivo, pero no en Supabase: ' + error.message, 'err');
+    }
+    renderAll(false);
+  };
+  $('#resetBtn').onclick = async () => {
+    const n = Object.keys(store.answers).filter(k => k.startsWith(state.bat + '-')).length;
+    if (!n || !confirm('¿Reiniciar las respuestas de esta batería?')) return;
+    for (const k of Object.keys(store.answers)) if (k.startsWith(state.bat + '-')) delete store.answers[k];
+    save();
+    if (SB && session) {
+      const { error } = await SB.from('attempts').delete()
+        .eq('user_id', session.user.id)
+        .like('question_uid', state.bat + '-%');
+      if (error) toast('Progreso reiniciado en este dispositivo, pero no en Supabase: ' + error.message, 'err');
+    }
+    renderAll(false);
+  };
+  $('#menuBtn').onclick = () => $('#sidebar').classList.toggle('open');
+
+  // Bibliografía
+  $('#bibBtn').onclick = () => {
+    renderBib('');
+    $('#bibSearch').value = '';
+    $('#bibModal').classList.add('open');
+    $('#bibSearch').focus();
+  };
+  $('#bibClose').onclick = () => $('#bibModal').classList.remove('open');
+  $('#bibModal').onclick = (e) => { if (e.target.id === 'bibModal') $('#bibModal').classList.remove('open'); };
+  $('#bibSearch').oninput = (e) => renderBib(e.target.value);
+
+  // Autenticación
+  document.querySelectorAll('[data-auth]').forEach(t => {
+    t.onclick = () => setAuthMode(t.dataset.auth);
+  });
+  $('#authForm').onsubmit = onAuthSubmit;
+  $('#authClose').onclick = () => $('#authModal').classList.remove('open');
+  $('#authModal').onclick = (e) => { if (e.target.id === 'authModal') $('#authModal').classList.remove('open'); };
+
+  // Discrepancias
+  $('#disputeClose').onclick = () => $('#disputeModal').classList.remove('open');
+  $('#disputeCancel').onclick = () => $('#disputeModal').classList.remove('open');
+  $('#disputeSubmit').onclick = submitDispute;
+  $('#disputeModal').onclick = (e) => { if (e.target.id === 'disputeModal') $('#disputeModal').classList.remove('open'); };
+
+  // Administración
+  $('#adminClose').onclick = () => $('#adminModal').classList.remove('open');
+  $('#adminModal').onclick = (e) => { if (e.target.id === 'adminModal') $('#adminModal').classList.remove('open'); };
+  document.querySelectorAll('[data-admin]').forEach(t => {
+    t.onclick = () => {
+      adminTab = t.dataset.admin;
+      document.querySelectorAll('[data-admin]').forEach(x => x.classList.toggle('on', x === t));
+      renderAdmin();
+    };
+  });
+
+  // Banner de configuración
+  const bannerClose = $('#bannerClose');
+  if (bannerClose) bannerClose.onclick = () => { $('#setupBanner').hidden = true; };
+
+  // Cerrar menú de usuario al hacer clic fuera
+  document.addEventListener('click', e => {
+    const m = $('#userMenu');
+    if (m && !m.hidden && !e.target.closest('#userChip') && !e.target.closest('#userMenu')) m.hidden = true;
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      ['#bibModal', '#authModal', '#disputeModal', '#adminModal'].forEach(s => {
+        const n = $(s); if (n) n.classList.remove('open');
+      });
+      closeSidebar();
+      return;
+    }
+    if (e.target.matches('input,select,textarea')) return;
+    if ($('.modal.open')) return;
+    const q = questions[state.uid]; if (!q) return;
+    const a = store.answers[q.uid];
+    const k = e.key.toLowerCase();
+    const map = { '1': 'a', '2': 'b', '3': 'c', '4': 'd', a: 'a', b: 'b', c: 'c', d: 'd' };
+    if (!a && map[k] && state.view === 'q') { e.preventDefault(); answer(q.uid, map[k]); return; }
+    if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); jump(1); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); jump(-1); }
+  });
+
+  // ============================================================
+  //  Arranque
+  // ============================================================
+  const hash = (() => { try { return decodeURIComponent(location.hash.replace('#', '')); } catch (e) { return ''; } })();
+  if (questions[hash]) {
+    state.uid = hash;
+    state.bat = questions[hash].bat;
+    if (questions[hash].caso != null) { state.view = 'case'; state.caseId = questions[hash].caso; }
+  }
+  document.querySelectorAll('.tab[data-bat]').forEach(x => x.classList.toggle('on', x.dataset.bat === state.bat));
+  $('#subtitle').textContent = BATS[state.bat].sub;
+  renderTopics();
+  renderAll(false);
+  renderAuthUI();
+  initSupabase();
+})();
