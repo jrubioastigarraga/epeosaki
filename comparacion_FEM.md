@@ -1,5 +1,8 @@
 # Comparación de respuestas FEM
 
+> Comparación realizada el 11/11/2026 contra `respuestas_FEM_enfermedades_infecciosas.json`.
+> La aplicación todavía no se ha modificado con estas respuestas.
+
 - Fichero: 500 respuestas (500 únicas)
 - Preguntas FEM en la app: 500
 - Coinciden: 424
