@@ -26,6 +26,8 @@
     "Inicio": "Hasiera",
     "Preguntas": "Galderak",
     "Bibliografía": "Bibliografia",
+    "Fallos": "Akatsak",
+    "Fallos:": "Akatsak:",
     "Administración": "Administrazioa",
     "Panel de administración": "Administrazio panela",
     "Iniciar sesión": "Saioa hasi",
