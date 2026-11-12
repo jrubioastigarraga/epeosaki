@@ -1248,6 +1248,11 @@
     $('#bar').style.width = (s.done * 100 / s.total) + '%';
   }
 
+  function collapsePicker() {
+    const pick = $('#asideQuestions');
+    if (pick && pick.open !== undefined) pick.open = false;
+  }
+
   function renderList() {
     const arr = poolUnits();
     const ans = viewAnswers();
@@ -1276,7 +1281,7 @@
         b.title = `Caso clínico ${u.id} · preguntas ${u.desde}-${u.hasta}` +
           (rg ? ` · ${answered}/${total} en este intento` : (answered ? ` · ${answered}/${total} respondidas` : '')) +
           (anyWrong ? ' · con fallos' : '');
-        b.onclick = () => { goUnit(u); closeSidebar(true); };
+        b.onclick = () => { goUnit(u); closeSidebar(true); collapsePicker(); };
         frag.appendChild(b);
       } else {
         const q = u.questions[0];
@@ -1285,7 +1290,7 @@
         const b = el('button', 'qitem' + (a ? (a.ok ? ' ok' : ' bad') : '') + (cur ? ' cur' : '') + (confirmed ? ' confirmed' : ''));
         b.innerHTML = `<span class="dot"></span>${q.numero}`;
         b.title = q.pregunta.slice(0, 90) + (confirmed ? ' · Respuesta confirmada' : '');
-        b.onclick = () => { go(q.uid); closeSidebar(true); };
+        b.onclick = () => { go(q.uid); closeSidebar(true); collapsePicker(); };
         frag.appendChild(b);
       }
     }
