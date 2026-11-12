@@ -84,6 +84,9 @@
   }
 
   const DS_CACHE = 'epeosaki-dataset-v1';
+  function readCacheMeta() {
+    try { return JSON.parse(localStorage.getItem(DS_CACHE) || 'null'); } catch (e) { return null; }
+  }
   function readDatasetCache() {
     try {
       const c = JSON.parse(localStorage.getItem(DS_CACHE) || 'null');
@@ -341,6 +344,15 @@
 
   async function loadRemoteDataset() {
     if (!SB) return false;
+    // Comprobación barata: si el número de preguntas coincide con la caché
+    // y esta es reciente, no se descarga el dataset (ahorra ~250 KB por visita).
+    const meta = readCacheMeta();
+    try {
+      const { count, error } = await SB.from('questions').select('*', { count: 'exact', head: true });
+      if (!error && meta && meta.data && meta.data.comun && meta.count === count && meta.ts && (Date.now() - meta.ts) < 24 * 3600 * 1000) {
+        return false;
+      }
+    } catch (e) { /* si falla la comprobación, se descarga con normalidad */ }
     try {
       const questionPage = (from) => SB.from('questions')
         .select('battery,numero,contexto,caso,pregunta,opciones,answer,confidence,source,tags,notas,tema,tema_id')
@@ -399,7 +411,7 @@
 
       const total = BAT_KEYS.reduce((n, k) => n + (remote[k].preguntas.length || 0), 0);
       if (!total) return false;
-      try { localStorage.setItem(DS_CACHE, JSON.stringify({ ts: Date.now(), data: remote })); } catch (e) { /* cuota llena: se carga siempre desde Supabase */ }
+      try { localStorage.setItem(DS_CACHE, JSON.stringify({ ts: Date.now(), count: total, data: remote })); } catch (e) { /* cuota llena: se carga siempre desde Supabase */ }
       rebuildDataset(remote);
       return true;
     } catch (e) {
