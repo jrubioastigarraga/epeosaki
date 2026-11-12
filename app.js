@@ -282,7 +282,6 @@
   let disputeUid = null;
   let adminTab = 'users';
   let adminConfFilter = 'all';
-  let statsMode = 'global';
   let statsBat = 'all';
 
   function toast(msg, type) {
@@ -1944,31 +1943,15 @@
 
   async function loadFailureStats() {
     const body = $('#statsBody');
-    body.innerHTML = '<div class="empty">Cargando&hellip;</div>';
-    let rows = [];
-    let source = '';
-    if (statsMode === 'mine') {
-      rows = computeMyFailureStats();
-      source = 'Tus intentos';
-    } else if (SB) {
-      try {
-        const { data, error } = await SB.rpc('question_failure_stats');
-        if (error) throw error;
-        rows = (data || []).map(r => ({
-          question_uid: r.question_uid,
-          attempts: Number(r.attempts),
-          failures: Number(r.failures),
-          failure_rate: Number(r.failure_rate)
-        }));
-        source = 'Todos los usuarios';
-      } catch (e) {
-        body.innerHTML = `<div class="empty">No se pudo cargar el ranking global: ${esc(e.message || e)}</div>`;
-        return;
-      }
-    } else {
-      rows = computeMyFailureStats();
-      source = 'Este dispositivo (sin Supabase)';
+    if (!session) {
+      body.innerHTML = '<div class="empty">Entra en tu cuenta para ver tus preguntas falladas.<br><button class="btn" id="statsLogin" type="button">Entrar</button></div>';
+      const b = $('#statsLogin');
+      if (b) b.onclick = () => openAuth('login');
+      return;
     }
+    body.innerHTML = '<div class="empty">Cargando&hellip;</div>';
+    const source = 'Tus intentos';
+    let rows = computeMyFailureStats();
     const allowed = allowedBats();
     rows = rows.filter(r => questions[r.question_uid] && allowed.includes(questions[r.question_uid].bat));
     if (statsBat !== 'all') {
@@ -1993,9 +1976,7 @@
   }
 
   function openStats() {
-    statsMode = 'global';
     statsBat = 'all';
-    document.querySelectorAll('[data-stats]').forEach(t => t.classList.toggle('on', t.dataset.stats === 'global'));
     $('#statsBat').value = 'all';
     loadFailureStats();
   }
@@ -2146,13 +2127,6 @@
 
   // Ranking de fallos (página normal dentro de la app, accesible desde el menú lateral)
   $('#statsBat').onchange = (e) => { statsBat = e.target.value; loadFailureStats(); };
-  document.querySelectorAll('[data-stats]').forEach(t => {
-    t.onclick = () => {
-      statsMode = t.dataset.stats;
-      document.querySelectorAll('[data-stats]').forEach(x => x.classList.toggle('on', x === t));
-      loadFailureStats();
-    };
-  });
 
   // Banner de configuración
   const bannerClose = $('#bannerClose');

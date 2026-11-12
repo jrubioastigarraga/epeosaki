@@ -160,15 +160,15 @@ Los intentos se guardan en `attempt_groups` y sus respuestas en `attempts`. Si n
 
 ### Preguntas más falladas
 
-El botón **Preguntas más falladas** abre un ranking con:
+El botón **Preguntas más falladas** muestra un ranking solo con tus propios datos y requiere iniciar sesión:
 
-- **Global**: todas las respuestas de todos los usuarios (función `question_failure_stats()`).
-- **Mis fallos**: agregado de todos tus intentos.
+- Agregado de todos tus intentos (fallos por pregunta).
+- Si no hay sesión, se muestra un aviso con botón para entrar.
 - Filtro por batería (Todas / Común / INF / MI).
 - Número de fallos, número de intentos y porcentaje de fallo.
 - Al pulsar una fila se abre esa pregunta.
 
-El ranking global solo expone datos agregados; no muestra qué usuario falló cada pregunta.
+No existe ranking entre usuarios; solo se ven tus propios fallos.
 
 ---
 
