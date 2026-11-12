@@ -349,7 +349,7 @@
     const meta = readCacheMeta();
     try {
       const { count, error } = await SB.from('questions').select('*', { count: 'exact', head: true });
-      if (!error && meta && meta.data && meta.data.comun && meta.count === count && meta.ts && (Date.now() - meta.ts) < 24 * 3600 * 1000) {
+      if (!error && meta && meta.data && meta.data.comun && meta.count === count && meta.ts && (Date.now() - meta.ts) < 6 * 3600 * 1000) {
         return false;
       }
     } catch (e) { /* si falla la comprobación, se descarga con normalidad */ }
