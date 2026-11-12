@@ -2027,10 +2027,22 @@
   window.addEventListener('resize', () => {
     if (window.innerWidth > 900) closeSidebar();
   });
+  let lastScrollY = 0;
   window.addEventListener('scroll', () => {
+    const y = window.scrollY;
     const h = document.querySelector('header');
-    if (h) h.classList.toggle('compact', window.scrollY > 40);
+    if (h) h.classList.toggle('compact', y > 40);
+    const bar = document.querySelector('.tabbar');
+    if (bar && window.innerWidth < 900) {
+      const dy = y - lastScrollY;
+      if (y < 40 || dy < -6) bar.classList.remove('tb-hidden');
+      else if (dy > 6) bar.classList.add('tb-hidden');
+    }
+    lastScrollY = y;
   }, { passive: true });
+  window.addEventListener('resize', () => {
+    if (window.innerWidth >= 900) { const bar = document.querySelector('.tabbar'); if (bar) bar.classList.remove('tb-hidden'); }
+  });
 
   // Bibliografía (página normal dentro de la app, accesible desde el menú lateral)
   $('#bibSearch').oninput = (e) => renderBib(e.target.value);
