@@ -1572,7 +1572,7 @@
     if (state.page === 'bibliografia') {
       html += sep + '<span aria-current="page">Bibliografía</span>';
     } else if (state.page === 'ranking') {
-      html += sep + '<span aria-current="page">Preguntas más falladas</span>';
+      html += sep + '<span aria-current="page">Akatsak</span>';
     } else if (state.page === 'admin') {
       html += sep + '<span aria-current="page">Administración</span>';
     } else {

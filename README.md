@@ -15,7 +15,7 @@ Además, la aplicación se conecta a **Supabase** para tener:
 - Usuarios **normales** y usuarios **administradores**.
 - **Confirmación de respuestas** por parte de los usuarios (y aviso de discrepancias).
 - **Intentos agrupados**: cada intento guarda las preguntas que hayas respondido, aunque no completes todas. Puedes revisar cualquier intento pasado desde el selector de la barra lateral.
-- **Ranking de preguntas más falladas**: global (todos los usuarios) o solo tus fallos.
+- **Akatsak**: ranking con tus propios fallos (requiere iniciar sesión).
 - Panel de administración en el menú lateral para gestionar roles, revisar/eliminar confirmaciones y corregir la respuesta correcta desde las discrepancias.
 - Sincronización del progreso entre dispositivos (si se inicia sesión).
 
@@ -158,9 +158,9 @@ Cada vez que respondes una pregunta sin tener un intento activo, la app crea un 
 
 Los intentos se guardan en `attempt_groups` y sus respuestas en `attempts`. Si no hay sesión, se guardan en `localStorage`; al iniciar sesión se sincronizan con Supabase.
 
-### Preguntas más falladas
+### Akatsak
 
-El botón **Preguntas más falladas** muestra un ranking solo con tus propios datos y requiere iniciar sesión:
+El botón **Akatsak** muestra un ranking solo con tus propios datos y requiere iniciar sesión:
 
 - Agregado de todos tus intentos (fallos por pregunta).
 - Si no hay sesión, se muestra un aviso con botón para entrar.
@@ -197,7 +197,7 @@ GitHub Pages sirve el contenido de la rama configurada (normalmente `main` / ra�
 ## 6. Estructura
 
 ```
-index.html              aplicación en una sola página con rutas internas (Inicio, Preguntas, Bibliografía, Ranking)
+index.html              aplicación en una sola página con rutas internas (Inicio, Preguntas, Bibliografía, Akatsak)
 i18n.js                  traducción al euskera de la interfaz (no traduce las preguntas ni la bibliografía); el botón "Euskara" de la cabecera cambia el idioma
 app.js                  lógica de la aplicación (casos, usuarios, confirmaciones)
 config.js               URL y clave anon de Supabase
@@ -225,7 +225,7 @@ La web es una herramienta de **uso personal y no comercial** para preparar la OP
 - **Correcciones:** si 5 o más usuarios discrepan de una respuesta e indican la misma opción correcta, la respuesta podrá revisarse y modificarse. Un administrador también puede corregirla desde el panel de administración. Cada cambio guarda la respuesta anterior, la nueva y la fecha, y se muestra en la pregunta afectada.
 - **Sin cuenta:** las respuestas, intentos y preferencias se guardan solo en `localStorage`, en el navegador. No se envían a ningún servidor.
 - **Con cuenta:** se guardan en Supabase el email, el nombre visible, la contraseña cifrada (la web nunca la almacena en claro), la fecha de alta, los intentos y respuestas, y las confirmaciones o correcciones con su comentario y fecha. La aceptación de estas condiciones queda registrada en los metadatos de la cuenta.
-- **Ranking:** solo se publican datos agregados de fallos; no se muestra qué usuario falló cada pregunta.
+- **Akatsak:** el ranking de fallos es privado; solo se ven los datos propios del usuario con sesión iniciada.
 - **Servicios:** GitHub Pages (alojamiento) y Supabase (autenticación y base de datos). Sin cookies publicitarias ni analítica de terceros.
 - **Conservación:** los datos se mantienen mientras se use la web para preparar la OPE. **Una vez finalizada la OPE se borrarán todos los datos** (cuentas, intentos y confirmaciones).
 - **Eliminar la cuenta:** en cualquier momento, desde el menú de usuario (**Eliminar cuenta y datos**). **Se borrará toda la información**: cuenta y email, intentos y respuestas, y confirmaciones y correcciones. El borrado es inmediato e irreversible.
