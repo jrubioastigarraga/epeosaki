@@ -1430,7 +1430,7 @@
     if (q.contexto && !opts.caseView) {
       html += `<div class="case">
         <div class="case-top"><b>Caso clínico ${q.caso || ''}</b><button class="btn case-copy" type="button" data-copy-case="1">Copiar</button></div>
-        <div class="txt">${esc(q.contexto)}</div>
+        <div class="txt">${esc(q.contexto)}</div>${q.caso != null ? figuresHtml(q.bat + ':' + q.caso) : ''}
       </div>`;
     }
     html += `<h2 class="question">${esc(q.pregunta)}</h2>`;
@@ -1476,6 +1476,19 @@
     </div>`;
   }
 
+  // Figuras de casos clínicos: imágenes locales en img/ (no en Supabase)
+  const CASE_FIGURES = {
+    'fem:9': [
+      { src: 'img/infecciosas/caso9-figura1.jpg', cap: 'Figura 1', alt: 'Lesiones cutáneas en el tronco' },
+      { src: 'img/infecciosas/caso9-figura2.jpg', cap: 'Figura 2', alt: 'Radiografía de tórax' }
+    ]
+  };
+  function figuresHtml(key) {
+    const figs = CASE_FIGURES[key];
+    if (!figs || !figs.length) return '';
+    return '<div class="case-figs">' + figs.map(f => `<figure><img src="${esc(f.src)}" alt="${esc(f.alt)}" loading="lazy" onerror="this.closest('figure').hidden=true"><figcaption>${esc(f.cap)}</figcaption></figure>`).join('') + '</div>';
+  }
+
   function caseHtml(c) {
     const rg = reviewGroup();
     const ans = viewAnswers();
@@ -1491,7 +1504,7 @@
     if (c.contexto) {
       html += `<div class="case case-full">
         <div class="case-top"><b>Enunciado del caso</b><button class="btn case-copy" type="button" data-copy-case="1">Copiar</button></div>
-        <div class="txt">${esc(c.contexto)}</div>
+        <div class="txt">${esc(c.contexto)}</div>${figuresHtml(c.key)}
       </div>`;
     }
     html += `<div class="case-progress">${rg

@@ -85,6 +85,10 @@ main{min-width:0}
 .case .txt{max-height:220px;overflow:auto;white-space:pre-wrap}
 .case-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px}
 .case-top b{margin-bottom:0}
+.case-figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:12px}
+.case-figs figure{margin:0;background:var(--bg);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+.case-figs img{display:block;width:100%;height:auto;background:#fff}
+.case-figs figcaption{font-size:12px;color:var(--muted);padding:6px 10px}
 .case-copy{padding:4px 9px;font-size:11px;white-space:nowrap}
 .options{display:grid;gap:9px;margin-top:16px}
 .opt{display:flex;gap:12px;align-items:flex-start;text-align:left;border:1px solid var(--line);background:var(--panel);border-radius:11px;padding:13px 15px;transition:.12s;color:var(--ink)}
