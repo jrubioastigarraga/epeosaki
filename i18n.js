@@ -25,6 +25,7 @@
     "Migas de pan": "Ogi-migak",
     "Inicio": "Hasiera",
     "Preguntas": "Galderak",
+    "Ranking": "Sailkapena",
     "Bibliografía": "Bibliografia",
     "Preguntas más falladas": "Gehien hutsegin diren galderak",
     "Administración": "Administrazioa",

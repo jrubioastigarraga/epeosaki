@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>epeosaki</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <style>
@@ -361,6 +361,113 @@ details#asideQuestions{display:block;background:var(--panel);border:1px solid va
 @media (max-width:700px){
   .uname{max-width:70px}
 }
+/* ================= Estilo iOS ================= */
+:root{
+  --bg:#F2F2F7; --panel:#FFFFFF; --ink:#000000; --muted:#8E8E93; --line:#C6C6C8;
+  --accent:#007AFF; --accent-soft:#E5F0FF;
+  --ok:#34C759; --ok-soft:#E4F7EA; --bad:#FF3B30; --bad-soft:#FFE9E7;
+  --warn:#B25000; --warn-soft:#FFF1DC;
+  --glass:rgba(249,249,249,.78);
+  --radius:20px; --shadow:0 1px 2px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#000000; --panel:#1C1C1E; --ink:#FFFFFF; --muted:#8E8E93; --line:#38383A;
+    --accent:#0A84FF; --accent-soft:#0A2A4D;
+    --ok:#30D158; --ok-soft:#10301A; --bad:#FF453A; --bad-soft:#3A1412;
+    --warn:#FFD60A; --warn-soft:#3A3010;
+    --glass:rgba(28,28,30,.78);
+  }
+}
+*{-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased;font-size:16px}
+input,select,textarea{font-size:16px !important}
+
+/* Navigation bar con título grande que se colapsa */
+header{background:var(--glass);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border-bottom:.5px solid var(--line);padding:calc(10px + env(safe-area-inset-top)) 16px 10px;gap:10px}
+.brand{gap:10px}
+.brand .logo{width:34px;height:34px;border-radius:9px;font-size:13px}
+.brand h1{font-size:34px;font-weight:700;letter-spacing:-.02em;line-height:1.1;transition:font-size .2s ease}
+.brand p{font-size:13px;margin-top:0}
+header.compact .brand h1{font-size:17px;font-weight:600}
+header.compact .brand p{display:none}
+header.compact .brand .logo{width:26px;height:26px;font-size:10px;border-radius:7px}
+.stats{gap:12px}
+.stat b{font-size:15px}
+.progress{width:120px;height:6px}
+#menuBtn{display:none !important}
+
+/* Sin barra lateral: navegación por pestañas */
+aside,.nav-backdrop,.mainmenu{display:none !important}
+.wrap{grid-template-columns:minmax(0,1fr);gap:0;padding:12px 16px calc(96px + env(safe-area-inset-bottom));max-width:none}
+.breadcrumbs{font-size:13px;margin:4px 4px 10px}
+
+/* Tarjetas de grupo (inset grouped) */
+.card,.page-card{background:var(--panel);border:0;border-radius:var(--radius);box-shadow:var(--shadow);padding:18px}
+.page-head{border-bottom:0;padding-bottom:10px}
+.page-head h2{font-size:28px;font-weight:700;letter-spacing:-.02em}
+.home{padding:20px}
+.home h2{font-size:26px}
+.bib-item{border-bottom:.5px solid var(--line)}
+.fail-row{border:0;border-bottom:.5px solid var(--line);border-radius:0;background:var(--panel)}
+.disopt{border:0;border-bottom:.5px solid var(--line);border-radius:0}
+.user-menu{border:0;border-radius:14px;background:var(--panel);box-shadow:0 10px 30px rgba(0,0,0,.18)}
+table.admin th{background:var(--panel)}
+
+/* Botones */
+.btn{border:0;border-radius:12px;background:var(--panel);color:var(--accent);font-weight:600;font-size:15px;padding:11px 16px;transition:transform .12s ease,opacity .12s ease}
+.btn:hover{background:var(--panel);border-color:transparent}
+.btn:active:not(:disabled){transform:scale(.97)}
+.btn.primary{background:var(--accent);color:#fff}
+.btn.primary:hover{background:var(--accent)}
+.btn.ghost{color:var(--muted)}
+.btn.confirm{background:var(--ok-soft);color:var(--ok)}
+.btn.confirm:hover{background:var(--ok-soft)}
+.btn:disabled{opacity:.4}
+.userchip,.iconbtn{border:0;background:var(--panel)}
+
+/* Controles segmentados */
+.tabs{background:rgba(118,118,128,.14);border-radius:9px;padding:2px;gap:2px}
+.tab{border:0;background:transparent;border-radius:7px;color:var(--ink);font-weight:600;font-size:13px;padding:7px 8px}
+.tab.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.search input,.auth-form input,.auth-form textarea,.page-head input{border:0;border-radius:10px;background:var(--bg);color:var(--ink)}
+select{border:0;border-radius:10px;background:var(--bg);color:var(--ink)}
+.qitem{border:0;border-radius:10px;background:var(--bg);color:var(--ink)}
+.qitem.cur{background:var(--accent);color:#fff}
+.opt{border:0;border-radius:14px;background:var(--panel);box-shadow:0 0 0 .5px var(--line)}
+.opt .k{background:var(--bg)}
+details#asideQuestions{border:0;border-radius:var(--radius);box-shadow:var(--shadow);background:var(--panel)}
+#asideQuestions > summary{font-size:16px;font-weight:600;color:var(--accent);padding:14px 16px}
+
+/* Hojas modales (bottom sheets) */
+.modal{align-items:flex-end;justify-content:center;padding:0;background:rgba(0,0,0,.35)}
+.modal-card{max-width:none !important;width:100%;border-radius:24px 24px 0 0;max-height:90vh;max-height:90dvh;padding-bottom:env(safe-area-inset-bottom);background:var(--panel);box-shadow:none}
+.modal-card::before{content:"";display:block;width:36px;height:5px;border-radius:3px;background:var(--line);margin:8px auto 4px;flex:0 0 auto}
+.modal-head{border-bottom:0;padding-top:6px}
+.modal-head h3{font-size:17px;font-weight:600;text-align:center}
+.modal-body{padding:6px 18px 22px}
+.toast{bottom:calc(96px + env(safe-area-inset-bottom));border-radius:14px}
+
+/* Barra de pestañas inferior */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:50;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--glass);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border-top:.5px solid var(--line);padding:6px 6px calc(6px + env(safe-area-inset-bottom))}
+.tb-item{display:flex;flex-direction:column;align-items:center;gap:2px;border:0;background:none;color:var(--muted);font-size:10px;font-weight:500;padding:4px 0;border-radius:0}
+.tb-item svg{width:24px;height:24px}
+.tb-item span{line-height:1.1}
+.tb-item.on{color:var(--accent);background:none}
+.tb-item:hover{background:none;color:var(--accent)}
+.tb-item:active{transform:scale(.94)}
+
+/* Vista de escritorio: marco de iPhone centrado */
+@media (min-width:600px){
+  body{background:#D1D1D6;display:flex;justify-content:center;align-items:flex-start;padding:24px 0;min-height:100vh}
+  .app{width:430px;min-height:calc(100vh - 48px);background:var(--bg);border-radius:44px;overflow:clip;box-shadow:0 20px 60px rgba(0,0,0,.25),0 0 0 10px #1C1C1E}
+  .tabbar{left:50%;right:auto;transform:translateX(-50%);width:430px;border-radius:0 0 34px 34px}
+  .modal{align-items:center;padding:16px}
+  .modal-card{border-radius:24px;max-width:520px !important}
+}
+@media (prefers-color-scheme: dark){
+  body{background:#000}
+}
 </style>
 </head>
 <body data-app="preguntas">
@@ -525,6 +632,26 @@ details#asideQuestions{display:block;background:var(--panel);border:1px solid va
     </main>
   </div>
 </div>
+
+<!-- Barra de pestañas inferior (estilo iOS) -->
+<nav class="tabbar" aria-label="Navegación principal">
+  <button class="mm-item tb-item" type="button" data-page="inicio">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+    <span>Inicio</span>
+  </button>
+  <button class="mm-item tb-item" type="button" data-page="preguntas">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+    <span>Preguntas</span>
+  </button>
+  <button class="mm-item tb-item" type="button" data-page="bibliografia">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h6a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4z"/><path d="M20 4h-6a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h6z"/></svg>
+    <span>Bibliografía</span>
+  </button>
+  <button class="mm-item tb-item" type="button" data-page="ranking">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20V12M12 20V5M19 20v-8"/></svg>
+    <span>Ranking</span>
+  </button>
+</nav>
 
 <!-- Iniciar sesión / crear cuenta -->
 <div class="modal" id="authModal">

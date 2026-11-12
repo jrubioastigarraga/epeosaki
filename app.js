@@ -2026,6 +2026,10 @@
   window.addEventListener('resize', () => {
     if (window.innerWidth > 900) closeSidebar();
   });
+  window.addEventListener('scroll', () => {
+    const h = document.querySelector('header');
+    if (h) h.classList.toggle('compact', window.scrollY > 40);
+  }, { passive: true });
 
   // Bibliografía (página normal dentro de la app, accesible desde el menú lateral)
   $('#bibSearch').oninput = (e) => renderBib(e.target.value);
