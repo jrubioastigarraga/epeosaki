@@ -24,6 +24,7 @@ create table if not exists public.profiles (
   email       text,
   display_name text,
   role        text not null default 'user' check (role in ('user', 'admin')),
+  blocks      text[] not null default array['comun', 'fem', 'mi'] check (blocks <@ array['comun', 'fem', 'mi']::text[]),
   created_at  timestamptz not null default now()
 );
 
@@ -67,8 +68,17 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_blocks text[];
 begin
-  insert into public.profiles (id, email, display_name, role)
+  v_blocks := array(
+    select distinct b
+    from jsonb_array_elements_text(coalesce(new.raw_user_meta_data -> 'blocks', '[]'::jsonb)) as t(b)
+    where b in ('comun', 'fem', 'mi')
+    order by b
+  );
+
+  insert into public.profiles (id, email, display_name, role, blocks)
   values (
     new.id,
     new.email,
@@ -76,7 +86,8 @@ begin
       nullif(new.raw_user_meta_data ->> 'display_name', ''),
       split_part(coalesce(new.email, ''), '@', 1)
     ),
-    'user'
+    'user',
+    coalesce(v_blocks, '{}'::text[])
   )
   on conflict (id) do update set email = excluded.email;
   return new;
@@ -143,6 +154,38 @@ create policy "confirmations_delete_own_or_admin"
   to authenticated
   using (user_id = auth.uid() or public.is_admin());
 
+-- Cambiar los bloques de la propia cuenta (solo esa columna, sin tocar el rol).
+create or replace function public.set_my_blocks(p_blocks text[])
+returns text[]
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_blocks text[];
+begin
+  if auth.uid() is null then
+    raise exception 'Debes iniciar sesión';
+  end if;
+
+  v_blocks := array(
+    select distinct b
+    from unnest(coalesce(p_blocks, '{}'::text[])) as t(b)
+    where b in ('comun', 'fem', 'mi')
+    order by b
+  );
+
+  update public.profiles
+     set blocks = v_blocks
+   where id = auth.uid();
+
+  return v_blocks;
+end;
+$$;
+
+revoke all on function public.set_my_blocks(text[]) from public;
+grant execute on function public.set_my_blocks(text[]) to authenticated;
+
 -- Permisos de tabla (las filas siguen limitadas por RLS).
 grant select, update on public.profiles to authenticated;
 grant select, insert, update, delete on public.confirmations to authenticated;
@@ -170,8 +213,7 @@ returns table (
   question_uid text,
   confirms     integer,
   disputes     integer,
-  last_at      timestamptz,
-  confirmers   text[]
+  last_at      timestamptz
 )
 language sql
 stable
@@ -182,13 +224,8 @@ as $$
     c.question_uid,
     count(*) filter (where c.is_correct)::int as confirms,
     count(*) filter (where not c.is_correct)::int as disputes,
-    max(c.created_at) as last_at,
-    (array_agg(
-       coalesce(nullif(p.display_name, ''), split_part(coalesce(p.email, ''), '@', 1), 'Usuario')
-       order by c.created_at desc
-     ) filter (where c.is_correct))[1:5] as confirmers
+    max(c.created_at) as last_at
   from public.confirmations c
-  left join public.profiles p on p.id = c.user_id
   group by c.question_uid;
 $$;
 

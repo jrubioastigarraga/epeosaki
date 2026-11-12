@@ -58,6 +58,8 @@ Además, la aplicación se conecta a **Supabase** para tener:
 >
 > En `ope_ana` ya está aplicado y las 1.200 preguntas están cargadas.
 
+> Para que cada usuario elija sus bloques (y cambiarlos desde **Mis bloques**), ejecuta [`sql/migrate_user_blocks.sql`](sql/migrate_user_blocks.sql). Los usuarios existentes quedan con los tres bloques.
+
 > Para que los usuarios puedan guardar intentos y confirmaciones de la batería **Medicina Interna** (`mi`), ejecuta [`sql/migrate_add_mi_battery.sql`](sql/migrate_add_mi_battery.sql). Amplía las restricciones de `question_uid` y `battery` para aceptar las preguntas `mi-1 ... mi-500`.
 
 ### 1.3 Copiar las claves
@@ -204,6 +206,7 @@ sql/schema.sql          tablas, funciones, triggers y políticas RLS
 sql/migrate_attempt_groups.sql  migración de progreso antiguo a intentos
 sql/migrate_question_overrides.sql  tabla para corregir respuestas (administradores)
 sql/migrate_add_mi_battery.sql  amplía las restricciones para la batería Medicina Interna
+sql/migrate_user_blocks.sql  bloques elegidos por cada usuario (perfil y cambio desde la cuenta)
 sql/migrate_dataset_to_supabase.sql  tablas batteries, questions y bibliography
 tools/seed_supabase.cjs sube a Supabase las preguntas y la bibliografía
 bibliografia/           leyes, guías y manuales (lectores + PDF)

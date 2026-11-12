@@ -1567,10 +1567,7 @@ window.OPE_CONFIG = {
     const mine = myConf[q.uid];
     let html = '';
     if (n > 0) {
-      const names = (st.confirmers || []).filter(Boolean);
-      const extra = n > names.length ? ` y ${n - names.length} más` : '';
-      const title = names.length ? `Confirmada por: ${names.join(', ')}${extra}` : `Confirmada por ${n} usuario(s)`;
-      html += `<span class="tag conf-ok" title="${esc(title)}">&#10003; Confirmada por ${n} usuario${n === 1 ? '' : 's'}</span>`;
+      html += `<span class="tag conf-ok" title="${esc(`Confirmada por ${n} usuario(s)`)}">&#10003; Confirmada por ${n} usuario${n === 1 ? '' : 's'}</span>`;
     } else {
       html += '<span class="tag conf-none">Sin confirmar</span>';
     }

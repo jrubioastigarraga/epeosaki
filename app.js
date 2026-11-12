@@ -14,6 +14,7 @@
     mi: { data: { meta: {}, preguntas: [] }, label: 'Medicina Interna', sub: 'Medicina Interna · 500 preguntas' }
   };
   const BAT_KEYS = Object.keys(BATS);
+  const BAT_SHORT = { comun: 'Común', fem: 'INF', mi: 'MI' };
 
   function rebuildDataset(raw) {
     if (raw) RAW = raw;
@@ -269,6 +270,7 @@
   let myConf = {};         // question_uid -> fila de confirmación del usuario
   let overrides = {};      // question_uid -> { answer, previous_answer }
   let authMode = 'login';
+  let autoHome = false;
   let disputeUid = null;
   let adminTab = 'users';
   let adminConfFilter = 'all';
@@ -402,6 +404,7 @@
       await loadQuestionOverrides();
       const { data } = await SB.auth.getSession();
       await setSession(data.session || null);
+      if (autoHome && session) { autoHome = false; setPage('preguntas', { skipHash: true, render: false }); }
       if (remoteLoaded) {
         renderTopics();
         renderAttemptSelect();
@@ -409,6 +412,7 @@
       }
       SB.auth.onAuthStateChange((event, sess) => {
         if (event === 'SIGNED_OUT') { setSession(null); return; }
+        if (event === 'PASSWORD_RECOVERY') openAuth('newpass');
         if (sess && (!session || sess.user.id !== session.user.id)) setTimeout(() => setSession(sess), 0);
       });
     } catch (e) {
@@ -431,12 +435,14 @@
     if (!session) {
       await loadConfirmationStats();
       renderAuthUI();
+      applyBlockVisibility();
       renderAll(false);
       if (location.hash === '#/admin') routeFromHash();
       return;
     }
     await Promise.all([loadProfile(), loadConfirmationStats(), loadMyConfirmations(), syncAttempts()]);
     renderAuthUI();
+    applyBlockVisibility();
     renderAll(false);
     if (location.hash === '#/admin') routeFromHash();
   }
@@ -445,7 +451,7 @@
     if (!session || !SB) return;
     try {
       const { data, error } = await SB.from('profiles')
-        .select('id,email,display_name,role')
+        .select('id,email,display_name,role,blocks')
         .eq('id', session.user.id)
         .maybeSingle();
       if (!error && data) profile = data;
@@ -457,7 +463,8 @@
         id: session.user.id,
         email,
         display_name: meta.display_name || email.split('@')[0] || 'Usuario',
-        role: 'user'
+        role: 'user',
+        blocks: []
       };
     }
   }
@@ -727,6 +734,36 @@
     renderAttemptSelect();
   }
 
+  function allowedBats() {
+    const mine = session && profile && Array.isArray(profile.blocks) ? profile.blocks : [];
+    return mine.length ? BAT_KEYS.filter(k => mine.includes(k)) : BAT_KEYS.slice();
+  }
+
+  function switchBattery(bat) {
+    state.view = 'q';
+    state.caseId = null;
+    applyBatteryUI(bat);
+    const arr = poolUnits();
+    if (arr.length) goUnit(arr[0]);
+    else { state.uid = state.bat + '-1'; renderAll(false); }
+  }
+
+  function applyBlockVisibility() {
+    const allowed = allowedBats();
+    document.querySelectorAll('.tab[data-bat]').forEach(t => { t.hidden = !allowed.includes(t.dataset.bat); });
+    if (statsBat !== 'all' && !allowed.includes(statsBat)) statsBat = 'all';
+    $('#statsBat').innerHTML = '<option value="all">Todas</option>' +
+      allowed.map(k => `<option value="${k}">${BAT_SHORT[k]}</option>`).join('');
+    $('#statsBat').value = statsBat;
+    if (!allowed.includes(state.bat)) {
+      const first = unitsFor(allowed[0])[0];
+      applyBatteryUI(allowed[0]);
+      state.view = first && first.type === 'case' ? 'case' : 'q';
+      state.caseId = first && first.type === 'case' ? first.key : null;
+      state.uid = first ? first.questions[0].uid : allowed[0] + '-1';
+    }
+  }
+
   function startNewAttempt() {
     const active = activeGroup(state.bat);
     if (active && Object.keys(active.answers).length === 0 && !state.reviewGroupId) {
@@ -805,11 +842,13 @@
         </button>
         <div class="user-menu" id="userMenu" hidden>
           <div class="um-head">${esc(session.user.email || '')}</div>
+          <button type="button" id="blocksBtn">Mis bloques</button>
           ${isAdmin ? '<button type="button" id="adminBtn">Panel de administración</button>' : ''}
           <button type="button" id="logoutBtn">Cerrar sesión</button>
         </div>`;
       $('#userChip').onclick = (e) => { e.stopPropagation(); const m = $('#userMenu'); m.hidden = !m.hidden; };
       if (isAdmin) $('#adminBtn').onclick = () => { $('#userMenu').hidden = true; setPage('admin', { push: true }); };
+      $('#blocksBtn').onclick = () => { $('#userMenu').hidden = true; openBlocks(); };
       $('#logoutBtn').onclick = async () => {
         $('#userMenu').hidden = true;
         if (SB) await SB.auth.signOut();
@@ -819,7 +858,8 @@
         store.active = { comun: null, fem: null, mi: null };
         store.owner = null;
         state.reviewGroupId = null;
-        if (state.page === 'admin') setPage('preguntas', { render: false });
+        applyBlockVisibility();
+        setPage('inicio', { render: false });
         save();
         renderAuthUI();
         renderAttemptSelect();
@@ -832,12 +872,35 @@
     }
   }
 
-  function openAuth() {
+  function openBlocks() {
+    if (!session) return openAuth();
+    const mine = profile && Array.isArray(profile.blocks) ? profile.blocks : [];
+    document.querySelectorAll('input[name="blockopt"]').forEach(i => { i.checked = mine.includes(i.value); });
+    $('#blocksMsg').textContent = '';
+    $('#blocksModal').classList.add('open');
+  }
+
+  async function saveBlocks() {
+    if (!session || !SB) return;
+    const picked = [...document.querySelectorAll('input[name="blockopt"]:checked')].map(i => i.value);
+    const btn = $('#blocksSubmit');
+    btn.disabled = true;
+    const { data, error } = await SB.rpc('set_my_blocks', { p_blocks: picked });
+    btn.disabled = false;
+    if (error) { $('#blocksMsg').textContent = 'No se pudo guardar: ' + error.message; return; }
+    profile.blocks = Array.isArray(data) ? data : picked;
+    $('#blocksModal').classList.remove('open');
+    toast('Bloques guardados', 'ok');
+    applyBlockVisibility();
+    renderAll(true);
+  }
+
+  function openAuth(mode) {
     if (!HAS_CONFIG || !SB) {
       toast('Supabase no está disponible. Revisa config.js y vendor/supabase.js (ver README).', 'err');
       return;
     }
-    setAuthMode('login');
+    setAuthMode(mode || 'login');
     $('#authMsg').textContent = '';
     $('#authModal').classList.add('open');
     setTimeout(() => { const e = $('#authEmail'); if (e) e.focus(); }, 40);
@@ -846,18 +909,30 @@
   function setAuthMode(mode) {
     authMode = mode;
     const signup = mode === 'signup';
+    const recover = mode === 'recover';
+    const newpass = mode === 'newpass';
     document.querySelectorAll('[data-auth]').forEach(t => t.classList.toggle('on', t.dataset.auth === mode));
-    $('#authTitle').textContent = signup ? 'Crear cuenta' : 'Iniciar sesión';
-    $('#authSubmit').textContent = signup ? 'Crear cuenta' : 'Entrar';
+    $('#authTabs').hidden = recover || newpass;
+    $('#authTitle').textContent = { login: 'Iniciar sesión', signup: 'Crear cuenta', recover: 'Recuperar contraseña', newpass: 'Nueva contraseña' }[mode];
+    $('#authSubmit').textContent = { login: 'Entrar', signup: 'Crear cuenta', recover: 'Enviar enlace', newpass: 'Guardar contraseña' }[mode];
     $('#nameField').hidden = !signup;
     $('#termsField').hidden = !signup;
     $('#termsBox').hidden = !signup;
     $('#termsBox').open = signup;
+    $('#blocksPickField').hidden = !signup;
+    if (signup) document.querySelectorAll('input[name="signupBlock"]').forEach(i => { i.checked = true; });
     if (!signup) {
       $('#authTerms').checked = false;
       $('#termsBox').open = false;
     }
-    $('#authPass').autocomplete = signup ? 'new-password' : 'current-password';
+    $('#emailField').hidden = newpass;
+    $('#authEmail').required = !newpass;
+    $('#passField').hidden = recover;
+    $('#authPass').required = !recover;
+    $('#authPassLabel').textContent = newpass ? 'Nueva contraseña' : 'Contraseña';
+    $('#authPass').autocomplete = signup || newpass ? 'new-password' : 'current-password';
+    $('#forgotBtn').hidden = mode !== 'login';
+    $('#backLoginBtn').hidden = !recover;
     $('#authMsg').textContent = '';
     $('#authMsg').className = 'auth-msg';
   }
@@ -882,14 +957,27 @@
     btn.disabled = true;
     setAuthMsg('');
     try {
-      if (authMode === 'signup') {
+      if (authMode === 'recover') {
+        const { error } = await SB.auth.resetPasswordForEmail(email, {
+          redirectTo: location.origin + location.pathname
+        });
+        if (error) throw error;
+        setAuthMsg('Si existe una cuenta con ese email, te hemos enviado un enlace para crear una nueva contraseña. Revisa también la carpeta de spam.', 'ok');
+      } else if (authMode === 'newpass') {
+        const { error } = await SB.auth.updateUser({ password: pass });
+        if (error) throw error;
+        $('#authModal').classList.remove('open');
+        toast('Contraseña actualizada. Ya puedes seguir practicando.', 'ok');
+      } else if (authMode === 'signup') {
         if (!$('#termsBox').open) $('#termsBox').open = true;
+        const blocks = [...document.querySelectorAll('input[name="signupBlock"]:checked')].map(i => i.value);
         const { data, error } = await SB.auth.signUp({
           email,
           password: pass,
           options: {
             data: {
               display_name: name || email.split('@')[0],
+              blocks,
               terms_accepted_at: new Date().toISOString(),
               terms_version: '2026-11'
             }
@@ -899,6 +987,7 @@
         if (data.session) {
           $('#authModal').classList.remove('open');
           toast('Cuenta creada. ¡Bienvenido!', 'ok');
+          if (state.page === 'inicio') setPage('preguntas', { push: true });
         } else {
           setAuthMsg('Cuenta creada. Revisa tu correo para confirmarla y después inicia sesión.', 'ok');
         }
@@ -907,6 +996,7 @@
         if (error) throw error;
         $('#authModal').classList.remove('open');
         toast('Sesión iniciada', 'ok');
+        if (state.page === 'inicio') setPage('preguntas', { push: true });
       }
     } catch (err) {
       setAuthMsg(authError(err), 'err');
@@ -986,10 +1076,7 @@
     const mine = myConf[q.uid];
     let html = '';
     if (n > 0) {
-      const names = (st.confirmers || []).filter(Boolean);
-      const extra = n > names.length ? ` y ${n - names.length} más` : '';
-      const title = names.length ? `Confirmada por: ${names.join(', ')}${extra}` : `Confirmada por ${n} usuario(s)`;
-      html += `<span class="tag conf-ok" title="${esc(title)}">&#10003; Confirmada por ${n} usuario${n === 1 ? '' : 's'}</span>`;
+      html += `<span class="tag conf-ok" title="${esc(`Confirmada por ${n} usuario(s)`)}">&#10003; Confirmada por ${n} usuario${n === 1 ? '' : 's'}</span>`;
     } else {
       html += '<span class="tag conf-none">Sin confirmar</span>';
     }
@@ -1382,13 +1469,22 @@
   // ============================================================
   //  Páginas, menú lateral y migas de pan
   // ============================================================
-  const PAGES = ['preguntas', 'bibliografia', 'ranking', 'admin'];
+  const PAGES = ['inicio', 'preguntas', 'bibliografia', 'ranking', 'admin'];
+
+  function renderHome() {
+    $('#homeBats').innerHTML = BAT_KEYS.map(k =>
+      `<li><b>${esc(BATS[k].label)}</b> · ${esc(BATS[k].sub)}</li>`
+    ).join('');
+    const guest = !session && HAS_CONFIG;
+    $('#homeSignup').hidden = !guest;
+    $('#homeLogin').hidden = !guest;
+  }
 
   function renderCrumbs() {
     const box = $('#crumbs');
     if (!box) return;
     const sep = '<span class="sep">/</span>';
-    const home = '<button type="button" data-page="preguntas">Inicio</button>';
+    const home = '<button type="button" data-page="inicio">Inicio</button>';
     let html = home;
     if (state.page === 'bibliografia') {
       html += sep + '<span aria-current="page">Bibliografía</span>';
@@ -1424,6 +1520,7 @@
     }
     state.page = page;
     const onQuestions = page === 'preguntas';
+    $('#pageHome').hidden = page !== 'inicio';
     $('#pageQuestions').hidden = !onQuestions;
     $('#pageBib').hidden = page !== 'bibliografia';
     $('#pageRanking').hidden = page !== 'ranking';
@@ -1447,6 +1544,7 @@
     if (page === 'bibliografia') renderBib($('#bibSearch').value || '');
     else if (page === 'ranking') openStats();
     else if (page === 'admin') openAdmin();
+    else if (page === 'inicio') renderHome();
     else if (opts.render !== false) renderAll(false);
   }
 
@@ -1598,53 +1696,64 @@
         };
       });
     } else {
-      const [confRes, profRes] = await Promise.all([
-        SB.from('confirmations')
-          .select('id,question_uid,is_correct,suggested_answer,comment,created_at,user_id')
-          .order('created_at', { ascending: false })
-          .limit(1000),
-        SB.from('profiles').select('id,email,display_name')
-      ]);
+      const confRes = await SB.from('confirmations')
+        .select('id,question_uid,is_correct,suggested_answer,comment,created_at')
+        .order('created_at', { ascending: false })
+        .limit(1000);
       if (confRes.error) { body.innerHTML = `<div class="empty">Error: ${esc(confRes.error.message)}</div>`; return; }
-      const data = confRes.data || [];
-      const byId = new Map((profRes.data || []).map(p => [p.id, p]));
-      const confs = data.filter(r => r.is_correct).length;
-      const disc = data.filter(r => !r.is_correct).length;
+      const groups = new Map();
+      for (const r of confRes.data || []) {
+        const g = groups.get(r.question_uid) || { uid: r.question_uid, confirms: 0, disputes: 0, proposals: {}, comments: [], last: r.created_at };
+        if (r.is_correct) {
+          g.confirms += 1;
+        } else {
+          g.disputes += 1;
+          if (r.suggested_answer) g.proposals[r.suggested_answer] = (g.proposals[r.suggested_answer] || 0) + 1;
+          if (r.comment) g.comments.push({ id: r.id, text: r.comment });
+        }
+        groups.set(r.question_uid, g);
+      }
+      const all = [...groups.values()];
+      const confs = all.filter(g => g.confirms > 0).length;
+      const disc = all.filter(g => g.disputes > 0).length;
       const filtered = adminConfFilter === 'disputes'
-        ? data.filter(r => !r.is_correct)
+        ? all.filter(g => g.disputes > 0)
         : adminConfFilter === 'confirms'
-          ? data.filter(r => r.is_correct)
-          : data;
-      const rows = filtered.map(r => {
-        const q = questions[r.question_uid];
-        const p = byId.get(r.user_id);
-        const who = p ? (p.display_name || p.email) : r.user_id;
+          ? all.filter(g => g.confirms > 0)
+          : all;
+      const rows = filtered.map(g => {
+        const q = questions[g.uid];
         const actual = q ? q.answer : null;
         const actualText = q && q.opciones ? q.opciones[actual] : '';
-        const propText = q && r.suggested_answer && q.opciones ? q.opciones[r.suggested_answer] : '';
-        const qText = q ? q.pregunta : r.question_uid;
-        const newAns = r.suggested_answer || actual || 'a';
-        const editor = (!r.is_correct && q)
+        const proposals = Object.entries(g.proposals).sort((a, b) => b[1] - a[1]);
+        const newAns = proposals.length ? proposals[0][0] : (actual || 'a');
+        const qText = q ? q.pregunta : g.uid;
+        const editor = (g.disputes > 0 && q)
           ? `<div class="correct-editor">
-               <select data-new-answer="${r.question_uid}" aria-label="Nueva respuesta correcta">
+               <select data-new-answer="${g.uid}" aria-label="Nueva respuesta correcta">
                  ${['a', 'b', 'c', 'd'].map(k => `<option value="${k}"${k === newAns ? ' selected' : ''}>${k}) ${esc(String(q.opciones[k] || '').slice(0, 55))}</option>`).join('')}
                </select>
-               <button class="btn primary" type="button" data-apply-answer="${r.question_uid}">Aplicar</button>
+               <button class="btn primary" type="button" data-apply-answer="${g.uid}">Aplicar</button>
              </div>`
           : '—';
-        const corrected = overrides[r.question_uid] ? ' <span class="pill">corregida</span>' : '';
+        const corrected = overrides[g.uid] ? ' <span class="pill">corregida</span>' : '';
+        const propHtml = proposals.length
+          ? proposals.map(([k, n]) => `<div><b>${esc(k)})</b> ${n} persona${n === 1 ? '' : 's'}</div>`).join('')
+          : '—';
+        const comHtml = g.comments.length
+          ? g.comments.map(c => `<div class="comment-item"><span>${esc(c.text)}</span><button class="btn" type="button" data-delconf="${c.id}">Eliminar</button></div>`).join('')
+          : '—';
         return `<tr>
-          <td><div class="admin-name">${q ? 'Pregunta ' + q.numero : esc(r.question_uid)}</div><div class="admin-sub">${esc(qText.slice(0, 90))}${qText.length > 90 ? '…' : ''}</div></td>
-          <td>${esc(who || '—')}</td>
-          <td>${r.is_correct ? '<span class="tag conf-ok">Confirma</span>' : '<span class="tag conf-bad">Discrepa</span>'}</td>
+          <td><div class="admin-name">${q ? 'Pregunta ' + q.numero : esc(g.uid)}</div><div class="admin-sub">${esc(qText.slice(0, 90))}${qText.length > 90 ? '…' : ''}</div></td>
           <td>${actual ? `<b>${esc(actual)})</b> ${esc(actualText || '')}${corrected}` : '—'}</td>
-          <td>${r.suggested_answer ? `<b>${esc(r.suggested_answer)})</b> ${esc(propText || '')}` : '—'}</td>
-          <td class="admin-comment">${esc(r.comment || '')}</td>
-          <td>${fmtDate(r.created_at)}</td>
+          <td>${g.confirms ? `<span class="tag conf-ok">${g.confirms} persona${g.confirms === 1 ? '' : 's'}</span>` : '—'}</td>
+          <td>${g.disputes ? `<span class="tag conf-bad">${g.disputes} persona${g.disputes === 1 ? '' : 's'}</span>` : '—'}</td>
+          <td>${propHtml}</td>
+          <td class="admin-comment">${comHtml}</td>
+          <td>${fmtDate(g.last)}</td>
           <td>${editor}</td>
           <td><div class="admin-actions">
-            <button class="btn" type="button" data-open-q="${r.question_uid}">Ver pregunta</button>
-            <button class="btn" type="button" data-delconf="${r.id}">Eliminar</button>
+            <button class="btn" type="button" data-open-q="${g.uid}">Ver pregunta</button>
           </div></td>
         </tr>`;
       }).join('');
@@ -1653,14 +1762,14 @@
         : adminConfFilter === 'confirms'
           ? 'No hay confirmaciones'
           : 'Sin confirmaciones todavía';
-      body.innerHTML = `<div class="stats-note">Las discrepancias no cambian la respuesta automáticamente. Revisa la respuesta actual, la opción propuesta y el comentario; si procede, elige la respuesta correcta en <b>Corregir</b> y pulsa <b>Aplicar</b>. El cambio se guarda para todos los usuarios.</div>
+      body.innerHTML = `<div class="stats-note">Una fila por pregunta. Las columnas indican cuántas personas confirman o discrepan y qué opción proponen. Las discrepancias no cambian la respuesta automáticamente: si procede, elige la respuesta correcta en <b>Corregir</b> y pulsa <b>Aplicar</b>. El cambio se guarda para todos los usuarios.</div>
         <div class="admin-filter">
-          <button class="tab${adminConfFilter === 'all' ? ' on' : ''}" type="button" data-conf-filter="all">Todas (${data.length})</button>
+          <button class="tab${adminConfFilter === 'all' ? ' on' : ''}" type="button" data-conf-filter="all">Todas (${all.length})</button>
           <button class="tab${adminConfFilter === 'disputes' ? ' on' : ''}" type="button" data-conf-filter="disputes">Discrepancias (${disc})</button>
           <button class="tab${adminConfFilter === 'confirms' ? ' on' : ''}" type="button" data-conf-filter="confirms">Confirmaciones (${confs})</button>
         </div>
         <div class="table-wrap"><table class="admin">
-        <thead><tr><th>Pregunta</th><th>Usuario</th><th>Tipo</th><th>Respuesta actual</th><th>Opción propuesta</th><th>Comentario</th><th>Fecha</th><th>Corregir</th><th></th></tr></thead>
+        <thead><tr><th>Pregunta</th><th>Respuesta actual</th><th>Confirman</th><th>Discrepan</th><th>Opciones propuestas</th><th>Comentarios</th><th>Última</th><th>Corregir</th><th></th></tr></thead>
         <tbody>${rows || `<tr><td colspan="9" class="empty-row">${emptyMsg}</td></tr>`}</tbody>
       </table></div>`;
       body.querySelectorAll('[data-conf-filter]').forEach(b => {
@@ -1774,6 +1883,8 @@
       rows = computeMyFailureStats();
       source = 'Este dispositivo (sin Supabase)';
     }
+    const allowed = allowedBats();
+    rows = rows.filter(r => questions[r.question_uid] && allowed.includes(questions[r.question_uid].bat));
     if (statsBat !== 'all') {
       rows = rows.filter(r => questions[r.question_uid] && questions[r.question_uid].bat === statsBat);
     }
@@ -1836,14 +1947,7 @@
   //  Eventos
   // ============================================================
   document.querySelectorAll('.tab[data-bat]').forEach(t => {
-    t.onclick = () => {
-      state.view = 'q';
-      state.caseId = null;
-      applyBatteryUI(t.dataset.bat);
-      const arr = poolUnits();
-      if (arr.length) goUnit(arr[0]);
-      else { state.uid = state.bat + '-1'; renderAll(false); }
-    };
+    t.onclick = () => switchBattery(t.dataset.bat);
   });
 
   $('#fAttempt').onchange = e => {
@@ -1900,6 +2004,19 @@
   });
   $('#authForm').onsubmit = onAuthSubmit;
   $('#authClose').onclick = () => $('#authModal').classList.remove('open');
+  $('#forgotBtn').onclick = () => setAuthMode('recover');
+  $('#backLoginBtn').onclick = () => setAuthMode('login');
+
+  // Mis bloques
+  $('#blocksClose').onclick = () => $('#blocksModal').classList.remove('open');
+  $('#blocksCancel').onclick = () => $('#blocksModal').classList.remove('open');
+  $('#blocksSubmit').onclick = saveBlocks;
+  $('#blocksModal').onclick = (e) => { if (e.target.id === 'blocksModal') $('#blocksModal').classList.remove('open'); };
+
+  // Página principal
+  $('#homeStart').onclick = () => setPage('preguntas', { push: true });
+  $('#homeSignup').onclick = () => openAuth('signup');
+  $('#homeLogin').onclick = () => openAuth('login');
   $('#authModal').onclick = (e) => { if (e.target.id === 'authModal') $('#authModal').classList.remove('open'); };
 
   // Discrepancias
@@ -1939,7 +2056,7 @@
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
-      ['#authModal', '#disputeModal'].forEach(s => {
+      ['#authModal', '#disputeModal', '#blocksModal'].forEach(s => {
         const n = $(s); if (n) n.classList.remove('open');
       });
       closeSidebar();
@@ -1983,6 +2100,9 @@
   const hashPage = hash.startsWith('/') ? hash.slice(1) : '';
   if (PAGES.includes(hashPage) && hashPage !== 'preguntas') {
     startPage = hashPage;
+  } else if (!hash) {
+    startPage = 'inicio';
+    autoHome = true;
   } else if (questions[hash]) {
     state.uid = hash;
     state.bat = questions[hash].bat;

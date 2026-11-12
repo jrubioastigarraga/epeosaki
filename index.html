@@ -317,6 +317,35 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
 .admin-sub{font-size:11px;color:var(--muted);word-break:break-all}
 .admin-comment{max-width:220px;white-space:pre-wrap}
 .empty-row{text-align:center;color:var(--muted);padding:24px}
+.comment-item{display:flex;gap:8px;align-items:flex-start;justify-content:space-between;margin-bottom:6px}
+.comment-item span{white-space:pre-wrap}
+
+/* ---------- página principal ---------- */
+.home{padding:30px 32px}
+.home-kicker{display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);background:var(--accent-soft);border-radius:99px;padding:3px 10px}
+.home h2{font-size:24px;line-height:1.25;margin:12px 0 8px}
+.home-lead{font-size:15px;color:#33415c;margin:0 0 18px;max-width:720px}
+.home-cta{display:flex;gap:9px;flex-wrap:wrap}
+.home-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:24px 0 16px}
+.home-box{border:1px solid var(--line);border-radius:12px;padding:16px 18px;background:#fbfcfe}
+.home-box h3{margin:0 0 10px;font-size:14px}
+.home-box p{font-size:13px;color:#33415c;margin:12px 0 0}
+.home-list{margin:0;padding-left:18px;font-size:13.5px;color:#33415c;display:grid;gap:6px}
+.home-foot{font-size:11.5px;color:var(--muted);margin:16px 0 0}
+.link-btn{border:0;background:none;padding:0;color:var(--accent);font-size:12.5px;font-weight:600;justify-self:start}
+.link-btn:hover{text-decoration:underline}
+.block-pick{border:0;margin:0;padding:0;display:grid;gap:7px;min-width:0}
+.block-pick legend{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:0;margin-bottom:6px}
+.block-pick small{font-size:11.5px;color:var(--muted);line-height:1.45}
+.block-opts{display:grid;gap:8px;margin:0 0 6px}
+.block-opt{display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:9px 11px;cursor:pointer;background:#fff}
+.block-opt:hover{background:#f8faff;border-color:#b9c8e8}
+.block-opt input{width:17px;height:17px;margin:0;flex:0 0 auto;accent-color:var(--accent)}
+.auth-form label.block-opt{display:flex;text-transform:none;letter-spacing:normal;font-size:13.5px;font-weight:500;color:var(--ink);gap:9px}
+@media (max-width:700px){
+  .home{padding:20px 18px}
+  .home-grid{grid-template-columns:1fr}
+}
 
 @media (max-width:700px){
   .uname{max-width:70px}
@@ -355,6 +384,7 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
         <button class="iconbtn" id="sidebarClose" type="button" aria-label="Cerrar menú">&#10005;</button>
       </div>
       <nav class="mainmenu" aria-label="Menú principal">
+        <button class="mm-item" type="button" data-page="inicio"><span class="mm-ic">&#8962;</span>Inicio</button>
         <button class="mm-item on" type="button" data-page="preguntas" aria-current="page"><span class="mm-ic">&#9998;</span>Preguntas</button>
         <button class="mm-item" type="button" data-page="bibliografia"><span class="mm-ic">&#128218;</span>Bibliografía</button>
         <button class="mm-item" type="button" data-page="ranking"><span class="mm-ic">&#9888;</span>Preguntas más falladas</button>
@@ -405,6 +435,37 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
 
     <main>
       <nav class="breadcrumbs" id="crumbs" aria-label="Migas de pan"></nav>
+
+      <section id="pageHome" hidden>
+        <div class="home card">
+          <span class="home-kicker">OPE Osakidetza</span>
+          <h2>Practica tipo test para la oposición de Osakidetza</h2>
+          <p class="home-lead">epeosaki es una herramienta de práctica con preguntas tipo test, casos clínicos y la referencia exacta de la bibliografía donde está cada respuesta.</p>
+          <div class="home-cta">
+            <button class="btn primary" id="homeStart" type="button">Empezar a practicar</button>
+            <button class="btn" id="homeSignup" type="button">Crear cuenta</button>
+            <button class="btn" id="homeLogin" type="button">Iniciar sesión</button>
+          </div>
+          <div class="home-grid">
+            <div class="home-box">
+              <h3>Bloques disponibles</h3>
+              <ul class="home-list" id="homeBats"></ul>
+              <p>Al crear tu cuenta eliges qué bloques quieres trabajar. Puedes cambiarlos en cualquier momento desde <b>Mis bloques</b>, en el menú de tu usuario.</p>
+            </div>
+            <div class="home-box">
+              <h3>Cómo funciona</h3>
+              <ol class="home-list">
+                <li>Responde las preguntas. Cada intento se guarda y puedes revisarlo más tarde.</li>
+                <li>Confirma las respuestas correctas o indica si crees que no lo son. Así ayudas a revisar la base de preguntas.</li>
+                <li>Consulta <b>Preguntas más falladas</b> para ver qué preguntas fallan más los opositores.</li>
+                <li>Tras responder, verás <b>Dónde está la respuesta</b>, con el texto y la referencia de la fuente.</li>
+              </ol>
+            </div>
+          </div>
+          <div class="ai-banner">&#9888; <b>Respuestas generadas con IA.</b> No son una plantilla oficial: verifícalas siempre con la bibliografía y la normativa vigente.</div>
+          <p class="home-foot">Uso personal y no comercial. Sin publicidad. Al finalizar la OPE se borrarán todos los datos de las cuentas.</p>
+        </div>
+      </section>
 
       <section id="pageQuestions">
         <div class="ai-banner">&#9888; <b>Respuestas generadas con IA.</b> No son oficiales: verifícalas siempre con la bibliografía antes de darlas por válidas.</div>
@@ -476,7 +537,7 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
       <button class="btn" id="authClose" type="button">Cerrar</button>
     </div>
     <div class="modal-body">
-      <div class="tabs auth-tabs">
+      <div class="tabs auth-tabs" id="authTabs">
         <button class="tab on" type="button" data-auth="login">Entrar</button>
         <button class="tab" type="button" data-auth="signup">Crear cuenta</button>
       </div>
@@ -484,12 +545,22 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
         <label id="nameField" hidden>Nombre visible
           <input id="authName" type="text" autocomplete="name" maxlength="60" placeholder="Tu nombre">
         </label>
-        <label>Email
+        <label id="emailField">Email
           <input id="authEmail" type="email" autocomplete="email" required placeholder="tu@email.com">
         </label>
-        <label>Contraseña
+        <label id="passField">
+          <span id="authPassLabel">Contraseña</span>
           <input id="authPass" type="password" autocomplete="current-password" required minlength="6" placeholder="Mínimo 6 caracteres">
         </label>
+        <button class="link-btn" id="forgotBtn" type="button">¿Has olvidado la contraseña?</button>
+        <button class="link-btn" id="backLoginBtn" type="button" hidden>&larr; Volver a iniciar sesión</button>
+        <fieldset class="block-pick" id="blocksPickField" hidden>
+          <legend>Bloques que quieres practicar</legend>
+          <label class="block-opt"><input type="checkbox" name="signupBlock" value="comun" checked><span>Batería común · 200 preguntas</span></label>
+          <label class="block-opt"><input type="checkbox" name="signupBlock" value="fem" checked><span>INF Enfermedades Infecciosas · 500 preguntas</span></label>
+          <label class="block-opt"><input type="checkbox" name="signupBlock" value="mi" checked><span>Medicina Interna · 500 preguntas</span></label>
+          <small>Puedes cambiarlos en cualquier momento desde <b>Mis bloques</b>. Si no marcas ninguno, se muestran todos.</small>
+        </fieldset>
         <label class="terms-check" id="termsField" hidden>
           <input id="authTerms" type="checkbox">
           <span>Acepto las <b>condiciones de uso y la política de datos</b>.</span>
@@ -540,6 +611,29 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
       <div class="modal-actions">
         <button class="btn" id="disputeCancel" type="button">Cancelar</button>
         <button class="btn primary" id="disputeSubmit" type="button">Enviar corrección</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bloques que practica el usuario -->
+<div class="modal" id="blocksModal">
+  <div class="modal-card" style="max-width:520px">
+    <div class="modal-head">
+      <h3>Mis bloques</h3>
+      <button class="btn" id="blocksClose" type="button">Cerrar</button>
+    </div>
+    <div class="modal-body">
+      <p class="stats-note" style="margin:6px 0 4px">Elige los bloques que quieres practicar. Solo verás esos bloques en el selector de la barra lateral y en el ranking de preguntas falladas. Si no marcas ninguno, se muestran todos.</p>
+      <div class="block-opts">
+        <label class="block-opt"><input type="checkbox" name="blockopt" value="comun"><span>Batería común · 200 preguntas</span></label>
+        <label class="block-opt"><input type="checkbox" name="blockopt" value="fem"><span>INF Enfermedades Infecciosas · 500 preguntas</span></label>
+        <label class="block-opt"><input type="checkbox" name="blockopt" value="mi"><span>Medicina Interna · 500 preguntas</span></label>
+      </div>
+      <div class="auth-msg" id="blocksMsg"></div>
+      <div class="modal-actions">
+        <button class="btn" id="blocksCancel" type="button">Cancelar</button>
+        <button class="btn primary" id="blocksSubmit" type="button">Guardar</button>
       </div>
     </div>
   </div>
