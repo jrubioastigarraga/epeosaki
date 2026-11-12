@@ -409,7 +409,6 @@
       await setSession(data.session || null);
       if (autoHome && session) { autoHome = false; setPage('preguntas', { skipHash: true, render: false }); }
       if (remoteLoaded) {
-        renderTopics();
         renderAttemptSelect();
         setPage(state.page, { skipHash: true, render: true });
       }
@@ -729,11 +728,9 @@
     state.text = '';
     state.shuffle = null;
     $('#search').value = '';
-    $('#fStatus').value = 'all';
     if (!opts || !opts.keepReview) state.reviewGroupId = null;
     $('#subtitle').textContent = BATS[bat].sub;
     document.querySelectorAll('.tab[data-bat]').forEach(x => x.classList.toggle('on', x.dataset.bat === bat));
-    renderTopics();
     renderAttemptSelect();
   }
 
@@ -1222,15 +1219,6 @@
 
   function currentUnitKey() {
     return state.view === 'case' ? 'case-' + state.caseId : state.uid;
-  }
-
-  function renderTopics() {
-    const sel = $('#fTopic');
-    const topics = [...new Set(Object.values(questions).filter(q => q.bat === state.bat).map(topicOf))].sort();
-    sel.innerHTML = '<option value="all">Todos los temas</option>' +
-      topics.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
-    if (!topics.includes(state.topic)) state.topic = 'all';
-    sel.value = state.topic;
   }
 
   function stats() {
@@ -2014,9 +2002,6 @@
   $('#newAttemptBtn').onclick = () => startNewAttempt();
 
   $('#search').oninput = e => { state.text = e.target.value; renderList(); };
-  $('#fStatus').onchange = e => { state.status = e.target.value; renderList(); };
-  $('#fConf').onchange = e => { state.conf = e.target.value; renderList(); };
-  $('#fTopic').onchange = e => { state.topic = e.target.value; renderList(); };
 
   $('#shuffleBtn').onclick = () => {
     const before = poolUnits();
@@ -2026,7 +2011,8 @@
     if (arr.length) goUnit(arr[0]);
   };
   $('#wrongOnlyBtn').onclick = () => {
-    state.status = 'wrong'; $('#fStatus').value = 'wrong'; renderList();
+    if (state.status === 'wrong') { state.status = 'all'; renderList(); toast('Mostrando todas las preguntas', 'ok'); return; }
+    state.status = 'wrong'; renderList();
     const arr = poolUnits();
     if (arr.length) { goUnit(arr[0]); closeSidebar(); }
     else alert('No hay preguntas falladas todavía.');
@@ -2171,7 +2157,6 @@
   }
   document.querySelectorAll('.tab[data-bat]').forEach(x => x.classList.toggle('on', x.dataset.bat === state.bat));
   $('#subtitle').textContent = BATS[state.bat].sub;
-  renderTopics();
   renderAttemptSelect();
   renderAll(false);
   if (startPage !== 'preguntas' && startPage !== 'admin') setPage(startPage, { skipHash: true, render: true });
