@@ -487,6 +487,21 @@ details#asideQuestions{border:0;border-radius:var(--radius);box-shadow:var(--sha
 @media (prefers-color-scheme: dark){
   body{background:#000}
 }
+/* Móvil: cabecera de una sola línea (título, idioma y avatar con la inicial) */
+@media (max-width:899px){
+  header{flex-wrap:nowrap;position:sticky;padding:calc(6px + env(safe-area-inset-top)) 14px 6px}
+  .brand{gap:8px;min-width:0}
+  .brand .logo{width:26px;height:26px;font-size:10px;border-radius:7px}
+  .brand h1{font-size:18px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .brand p{display:none}
+  .stats{gap:8px;flex-wrap:nowrap;flex:0 0 auto}
+  .stat{display:none}
+  .progress{position:absolute;left:0;right:0;bottom:0;width:100%;max-width:none;height:3px;border-radius:0}
+  .uname,.role{display:none}
+  .userchip{padding:2px}
+  .avatar{width:26px;height:26px;font-size:11px}
+  #langBtn{padding:5px 9px}
+}
 </style>
 </head>
 <body data-app="inicio">
