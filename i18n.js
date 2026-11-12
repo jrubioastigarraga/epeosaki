@@ -339,7 +339,7 @@
 
   function applyLanguage() {
     var btn = document.getElementById('langBtn');
-    if (btn) btn.textContent = lang === 'eu' ? 'Castellano' : 'Euskara';
+    if (btn) { btn.textContent = lang === 'eu' ? 'ES' : 'EU'; btn.title = lang === 'eu' ? 'Gaztelania' : 'Euskara'; }
     var search = document.getElementById('search');
     if (search && lang === 'eu') search.placeholder = 'Bilatu testuaren edo zenbakiaren arabera…';
     if (lang !== 'eu') return;

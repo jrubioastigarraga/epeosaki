@@ -2030,8 +2030,7 @@
   let lastScrollY = 0;
   window.addEventListener('scroll', () => {
     const y = window.scrollY;
-    const h = document.querySelector('header');
-    if (h) h.classList.toggle('compact', y > 40);
+    document.documentElement.style.setProperty('--c', Math.min(1, Math.max(0, y / 60)).toFixed(3));
     const bar = document.querySelector('.tabbar');
     if (bar && window.innerWidth < 900) {
       const dy = y - lastScrollY;
