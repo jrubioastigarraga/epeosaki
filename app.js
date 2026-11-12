@@ -1552,7 +1552,7 @@
   // ============================================================
   //  Páginas, menú lateral y migas de pan
   // ============================================================
-  const PAGES = ['inicio', 'preguntas', 'bibliografia', 'ranking', 'admin'];
+  const PAGES = ['inicio', 'preguntas', 'bibliografia', 'ranking', 'baremo', 'admin'];
 
   function renderHome() {
     $('#homeBats').innerHTML = BAT_KEYS.map(k =>
@@ -1573,6 +1573,8 @@
       html += sep + '<span aria-current="page">Bibliografía</span>';
     } else if (state.page === 'ranking') {
       html += sep + '<span aria-current="page">Fallos</span>';
+    } else if (state.page === 'baremo') {
+      html += sep + '<span aria-current="page">Baremo</span>';
     } else if (state.page === 'admin') {
       html += sep + '<span aria-current="page">Administración</span>';
     } else {
@@ -1608,6 +1610,8 @@
     $('#pageQuestions').hidden = !onQuestions;
     $('#pageBib').hidden = page !== 'bibliografia';
     $('#pageRanking').hidden = page !== 'ranking';
+    $('#pageBaremo').hidden = page !== 'baremo';
+    if (page === 'baremo') renderBaremo();
     $('#pageAdmin').hidden = page !== 'admin';
     $('#asideQuestions').hidden = !onQuestions;
     document.querySelectorAll('.mm-item').forEach(b => {
@@ -2011,6 +2015,179 @@
   }
 
   // ============================================================
+  //  Baremo de méritos (Anexo III, Resolución 1679/2026, médico/a familia-EAP)
+  // ============================================================
+  const BAREMO_STORE = 'epeosaki-baremo-v1';
+  const brmVals = (() => { try { return JSON.parse(localStorage.getItem(BAREMO_STORE) || '{}') || {}; } catch (e) { return {}; } })();
+  const brmLang = () => (document.documentElement.lang === 'es' ? 'es' : 'eu');
+
+  function brmIdiomaOpts(es, eu) {
+    return [
+      { v: '0', es: '—', eu: '—', pts: 0 },
+      { v: 'b1', es: es + ' B1', eu: eu + ' B1', pts: 0.5 },
+      { v: 'b2', es: es + ' B2', eu: eu + ' B2', pts: 1 },
+      { v: 'c1', es: es + ' C1/C2', eu: eu + ' C1/C2', pts: 1.5 }
+    ];
+  }
+  const BAREMO_GROUPS = [
+    { id: 1, es: 'Experiencia profesional', eu: 'Lan-esperientzia', max: 60 },
+    { id: 2, es: 'Promoción interna (servicios previos, turno PI)', eu: 'Barne-promozioa (aurreko zerbitzuak, PI txanda)' },
+    { id: 3, es: 'Formación especializada', eu: 'Espezializazio- formazioa' },
+    { id: 4, es: 'Formación postgrado', eu: 'Graduondoko formazioa' },
+    { id: 5, es: 'Expediente de pregrado', eu: 'Gradu aurreko espedientea' },
+    { id: 6, es: 'Idiomas (inglés, francés, alemán · máx. 3)', eu: 'Hizkuntzak (ingelesa, frantsesa, alemana · gehienez 3)' },
+    { id: 7, es: 'Informática (máx. 2)', eu: 'Informatika (gehienez 2)' },
+    { id: 8, es: 'Formación continuada (últimos 10 años)', eu: 'Etengabeko formazioa (azken 10 urteak)' },
+    { id: 9, es: 'Actividades docentes', eu: 'Irakaskuntza-jarduerak' },
+    { id: 10, es: 'Actividades científicas', eu: 'Zientzia-jarduerak' },
+    { id: 11, es: 'Euskera', eu: 'Euskara' }
+  ];
+  const BAREMO_FIELDS = [
+    { k: 'exp1', g: 1, t: 'm', pts: 0.30, es: 'Meses en la misma categoría y puesto funcional', eu: 'Hilabeteak kategoria eta postu berean' },
+    { k: 'exp2', g: 1, t: 'm', pts: 0.15, es: 'Meses en urgencias, UTE, HAD, medicina interna, pediatría AP o investigación', eu: 'Hilabeteak larrialdi, UTE, EDK, barne-medikuntza, AP pediatria edo ikerketan' },
+    { k: 'exp3', g: 1, t: 'm', pts: 0.075, es: 'Meses en otras especialidades', eu: 'Hilabeteak bestelako espezialitatetan' },
+    { k: 'piE', g: 2, t: 'm', pts: 0.03, es: 'Meses grupo E', eu: 'Hilabeteak E taldean' },
+    { k: 'piD', g: 2, t: 'm', pts: 0.045, es: 'Meses grupo D', eu: 'Hilabeteak D taldean' },
+    { k: 'piC', g: 2, t: 'm', pts: 0.06, es: 'Meses grupo C', eu: 'Hilabeteak C taldean' },
+    { k: 'piB', g: 2, t: 'm', pts: 0.075, es: 'Meses grupo B', eu: 'Hilabeteak B taldean' },
+    { k: 'piA', g: 2, t: 'm', pts: 0.15, es: 'Meses grupo A', eu: 'Hilabeteak A taldean' },
+    { k: 'piP', g: 2, t: 'm', pts: 0.30, es: 'Meses en el mismo puesto al que se opta', eu: 'Hilabeteak esleitzen den postu berean' },
+    { k: 'esp', g: 3, t: 's', opts: [
+      { v: '0', es: 'Ninguna', eu: 'Bat ere ez', pts: 0 },
+      { v: 'mir', es: 'MFyC vía MIR o extranjera convalidada', eu: 'MFyC MIR bidez edo baliogabetua', pts: 20 },
+      { v: 'eoce', es: 'Perfeccionamiento / EOCE (MFyC)', eu: 'Perfekzionamendua / EOCE (MFyC)', pts: 3 }
+    ] },
+    { k: 'espMir', g: 3, t: 'n', pts: 0.50, es: 'Nº otros títulos de especialista (MIR)', eu: 'Bestelako espezialista-titulu kopurua (MIR)' },
+    { k: 'espNoMir', g: 3, t: 'n', pts: 0.25, es: 'Nº otros títulos de especialista (no MIR)', eu: 'Bestelako espezialista-titulu kopurua (ez MIR)' },
+    { k: 'doctor', g: 4, t: 's', opts: [
+      { v: '0', es: 'Ninguno', eu: 'Bat ere ez', pts: 0 },
+      { v: 'd', es: 'Doctor/a', eu: 'Doktorea', pts: 9 },
+      { v: 'cl', es: 'Doctor/a cum laude', eu: 'Doktorea cum laude', pts: 10 }
+    ] },
+    { k: 'master', g: 4, t: 'n', pts: 6, es: 'Nº másteres de postgrado', eu: 'Graduondoko masterrak' },
+    { k: 'experto', g: 4, t: 'n', pts: 5, es: 'Nº experto/a o esp. universitario/a', eu: 'Aditu edo unib. espezialistak' },
+    { k: 'dea', g: 4, t: 'n', pts: 4, es: 'Nº suficiencia investigadora / DEA', eu: 'Ikerketa-gaitasuna / DEA' },
+    { k: 'licmh', g: 4, t: 'n', pts: 3, es: 'Nº licenciaturas sobresaliente o M.H.', eu: 'Nabarmena edo O.M. lizentziak' },
+    { k: 'doccur', g: 4, t: 'n', pts: 0.25, nmax: 10, es: 'Nº cursos de doctorado (máx. 10)', eu: 'Doktorego-ikastaroak (gehienez 10)' },
+    { k: 'otratit', g: 4, t: 'n', pts: 2.5, es: 'Nº otras titulaciones relacionadas', eu: 'Bestelako titulu erlazionatuak' },
+    { k: 'pregrado', g: 5, t: 'p', cap: 10, es: 'Puntos del expediente (tabla del BOPV)', eu: 'Espedientearen puntuak (BOPV taula)' },
+    { k: 'idiEn', g: 6, t: 's', opts: brmIdiomaOpts('Inglés', 'Ingelesa') },
+    { k: 'idiFr', g: 6, t: 's', opts: brmIdiomaOpts('Francés', 'Frantsesa') },
+    { k: 'idiDe', g: 6, t: 's', opts: brmIdiomaOpts('Alemán', 'Alemana') },
+    { k: 'info', g: 7, t: 'p', cap: 2, es: 'Puntos de informática', eu: 'Informatika puntuak' },
+    { k: 'fc1', g: 8, t: 'n', pts: 0.25, es: 'Nº cursos de hasta 9 horas', eu: '9 ordu arteko ikastaroak' },
+    { k: 'fc2', g: 8, t: 'n', pts: 0.75, es: 'Nº cursos de 10 a 19 horas', eu: '10-19 orduko ikastaroak' },
+    { k: 'fc3', g: 8, t: 'n', pts: 1.25, es: 'Nº cursos de 20 a 29 horas', eu: '20-29 orduko ikastaroak' },
+    { k: 'fc4', g: 8, t: 'n', pts: 2, es: 'Nº cursos de 30 a 49 horas', eu: '30-49 orduko ikastaroak' },
+    { k: 'fc5', g: 8, t: 'n', pts: 3, es: 'Nº cursos de 50 a 99 horas', eu: '50-99 orduko ikastaroak' },
+    { k: 'fc6', g: 8, t: 'n', pts: 4, es: 'Nº cursos de 100 a 249 horas', eu: '100-249 orduko ikastaroak' },
+    { k: 'fc7', g: 8, t: 'n', pts: 5, es: 'Nº cursos de 250 a 599 horas', eu: '250-599 orduko ikastaroak' },
+    { k: 'fc8', g: 8, t: 'n', pts: 6, es: 'Nº cursos de 600 o más horas', eu: '600 ordu edo gehiagoko ikastaroak' },
+    { k: 'docCat', g: 9, t: 'n', pts: 1, es: 'Años como catedrático/a', eu: 'Katedradun urteak' },
+    { k: 'docTit', g: 9, t: 'n', pts: 0.5, es: 'Años como titular o asociado/a', eu: 'Titular edo elkartu urteak' },
+    { k: 'docTut', g: 9, t: 'n', pts: 0.75, es: 'Años como tutor/a de residentes', eu: 'Erresidentzien tutore urteak' },
+    { k: 'docHor', g: 9, t: 'n', pts: 0.05, es: 'Horas de docencia en formación continuada', eu: 'Etengabeko formazioko irakasorduak' },
+    { k: 'ponR', g: 10, t: 'n', pts: 0.5, es: 'Nº ponencias regionales', eu: 'Lurraldeko hitzaldiak' },
+    { k: 'ponN', g: 10, t: 'n', pts: 2, es: 'Nº ponencias nacionales', eu: 'Estatu mailako hitzaldiak' },
+    { k: 'ponI', g: 10, t: 'n', pts: 3, es: 'Nº ponencias internacionales', eu: 'Nazioarteko hitzaldiak' },
+    { k: 'comR', g: 10, t: 'n', pts: 0.3, es: 'Nº comunicaciones o póster regionales', eu: 'Lurraldeko komunikazio edo poster-ak' },
+    { k: 'comN', g: 10, t: 'n', pts: 1.2, es: 'Nº comunicaciones o póster nacionales', eu: 'Estatu mailakoak' },
+    { k: 'comI', g: 10, t: 'n', pts: 2, es: 'Nº comunicaciones o póster internacionales', eu: 'Nazioartekoak' },
+    { k: 'mesaR', g: 10, t: 'n', pts: 0.4, es: 'Nº mesas redondas regionales', eu: 'Lurraldeko mahi-inguruak' },
+    { k: 'mesaN', g: 10, t: 'n', pts: 1.5, es: 'Nº mesas redondas nacionales', eu: 'Estatu mailakoak' },
+    { k: 'mesaI', g: 10, t: 'n', pts: 2.5, es: 'Nº mesas redondas internacionales', eu: 'Nazioartekoak' },
+    { k: 'pubP', g: 10, t: 'n', pts: 2, es: 'Nº publicaciones (primer/a autor/a)', eu: 'Argitalpenak (egile nagusia)' },
+    { k: 'pubO', g: 10, t: 'n', pts: 1, es: 'Nº publicaciones (otros/as autores/as)', eu: 'Argitalpenak (beste egileak)' },
+    { k: 'libP', g: 10, t: 'n', pts: 4, es: 'Nº libros (primer/a autor/a)', eu: 'Liburuak (egile nagusia)' },
+    { k: 'libO', g: 10, t: 'n', pts: 2, es: 'Nº libros (otros/as autores/as)', eu: 'Liburuak (beste egileak)' },
+    { k: 'capP', g: 10, t: 'n', pts: 2, es: 'Nº capítulos (primer/a autor/a)', eu: 'Kapituluak (egile nagusia)' },
+    { k: 'capO', g: 10, t: 'n', pts: 1, es: 'Nº capítulos (otros/as autores/as)', eu: 'Kapituluak (beste egileak)' },
+    { k: 'tesina', g: 10, t: 'n', pts: 3, es: 'Nº tesinas', eu: 'Tesinak' },
+    { k: 'eusk', g: 11, t: 's', opts: [
+      { v: '0', es: 'Ninguno', eu: 'Bat ere ez', pts: 0 },
+      { v: 'pl1', es: 'PL1', eu: 'PL1', pts: 9 },
+      { v: 'pl2', es: 'PL2', eu: 'PL2', pts: 18 }
+    ] }
+  ];
+
+  function brmNum(v) { const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) && n > 0 ? n : 0; }
+  function brmFmt(n) { return (Math.round(n * 100) / 100).toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
+
+  function brmPoints() {
+    const out = { exp: 0, form: 0, eusk: 0, idi: 0, idiRaw: 0 };
+    for (const f of BAREMO_FIELDS) {
+      const v = brmVals[f.k];
+      let p = 0;
+      if (f.t === 'm') p = brmNum(v) * f.pts;
+      else if (f.t === 'n') p = (f.nmax ? Math.min(brmNum(v), f.nmax) : brmNum(v)) * f.pts;
+      else if (f.t === 'p') p = Math.min(brmNum(v), f.cap || Infinity);
+      else if (f.t === 's') { const o = (f.opts || []).find(o => o.v === v); p = o ? o.pts : 0; }
+      if (f.g <= 2) out.exp += p;
+      else if (f.g === 11) out.eusk += p;
+      else out.form += p;
+      if (f.g === 6) out.idiRaw += p;
+    }
+    // Idiomas: máximo 3 en total (el exceso se descuenta de formación)
+    out.idi = Math.min(out.idiRaw, 3);
+    out.form = Math.max(0, out.form - (out.idiRaw - out.idi));
+    // Topes de sección
+    out.form = Math.min(out.form, 20);
+    out.exp = Math.min(out.exp, 60);
+    out.total = out.exp + out.form + out.eusk;
+    return out;
+  }
+
+  function renderBaremo() {
+    const box = $('#baremoBody');
+    if (!box || $('#pageBaremo').hidden) return;
+    const L = brmLang();
+    const t = (o) => o[L] || o.es;
+    let html = '';
+    for (const g of BAREMO_GROUPS) {
+      const fields = BAREMO_FIELDS.filter(f => f.g === g.id);
+      if (!fields.length) continue;
+      html += `<div class="brm-sec"><h3>${esc(t(g))}</h3>`;
+      if (g.max) html += `<p class="brm-max">Máx. ${g.max} puntos / Gehienez ${g.max} puntu</p>`;
+      for (const f of fields) {
+        const val = brmVals[f.k] != null ? String(brmVals[f.k]).replace('.', ',') : '';
+        const right = f.t === 's'
+          ? `<select data-brm="${f.k}">${(f.opts || []).map(o => `<option value="${o.v}"${String(brmVals[f.k]) === o.v ? ' selected' : ''}>${esc(t(o))}</option>`).join('')}</select>`
+          : `<input data-brm="${f.k}" type="number" min="0" step="${f.t === 'p' ? '0.01' : '1'}" inputmode="decimal" value="${val}">`;
+        const tag = f.t === 'm' ? `<span class="brm-pts">${brmFmt(f.pts)}/mes</span>`
+          : f.t === 'n' ? `<span class="brm-pts">${brmFmt(f.pts)}/ud.</span>`
+          : f.t === 'p' ? `<span class="brm-pts">máx. ${brmFmt(f.cap)}</span>` : '';
+        html += `<div class="brm-row"><label>${esc(t(f))} ${tag}</label>${right}</div>`;
+      }
+      html += '</div>';
+    }
+    html += `<div class="brm-total"><span data-brm-t="totalLbl"></span><b data-brm-t="total"></b></div>`;
+    box.innerHTML = html;
+    box.querySelectorAll('[data-brm]').forEach(el => {
+      const save = () => {
+        brmVals[el.dataset.brm] = el.value === '' ? null : el.value;
+        try { localStorage.setItem(BAREMO_STORE, JSON.stringify(brmVals)); } catch (e) { /* sin cuota */ }
+        brmPaintTotals();
+      };
+      el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', save);
+    });
+    brmPaintTotals();
+  }
+
+  function brmPaintTotals() {
+    const box = $('#baremoBody');
+    if (!box) return;
+    const L = brmLang();
+    const p = brmPoints();
+    const lbl = L === 'eu'
+      ? `Esperientzia ${brmFmt(p.exp)} · Formazioa ${brmFmt(p.form)} · Euskara ${brmFmt(p.eusk)} · Guztira:`
+      : `Experiencia ${brmFmt(p.exp)} · Formación ${brmFmt(p.form)} · Euskera ${brmFmt(p.eusk)} · Total:`;
+    const lblEl = box.querySelector('[data-brm-t="totalLbl"]');
+    const totEl = box.querySelector('[data-brm-t="total"]');
+    if (lblEl) lblEl.textContent = lbl;
+    if (totEl) totEl.textContent = brmFmt(p.total);
+  }
+
+  // ============================================================
   //  Eventos
   // ============================================================
   document.querySelectorAll('.tab[data-bat]').forEach(t => {
@@ -2137,6 +2314,14 @@
 
   // Ranking de fallos (página normal dentro de la app, accesible desde el menú lateral)
   $('#statsBat').onchange = (e) => { statsBat = e.target.value; loadFailureStats(); };
+
+  // Baremo de méritos
+  $('#baremoReset').onclick = () => {
+    for (const k of Object.keys(brmVals)) delete brmVals[k];
+    try { localStorage.removeItem(BAREMO_STORE); } catch (e) { /* sin cuota */ }
+    renderBaremo();
+  };
+  $('#langBtn').addEventListener('click', () => setTimeout(renderBaremo, 0));
 
   // Banner de configuración
   const bannerClose = $('#bannerClose');

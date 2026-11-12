@@ -462,10 +462,10 @@ details#asideQuestions{border:0;border-radius:var(--radius);box-shadow:var(--sha
 .toast{bottom:calc(96px + env(safe-area-inset-bottom));border-radius:14px}
 
 /* Barra de pestañas inferior */
-.tabbar{position:fixed;left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:50;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;background:var(--tabbar);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border-radius:32px;border:.5px solid var(--glass-edge);box-shadow:inset 0 1px 0 var(--glass-edge),0 8px 28px rgba(0,0,0,.18);padding:6px}
+.tabbar{position:fixed;left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:50;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:2px;background:var(--tabbar);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border-radius:32px;border:.5px solid var(--glass-edge);box-shadow:inset 0 1px 0 var(--glass-edge),0 8px 28px rgba(0,0,0,.18);padding:6px}
 .tb-item{display:flex;flex-direction:column;align-items:center;gap:2px;border:0;background:none;color:var(--muted);font-size:10px;font-weight:500;padding:4px 0;border-radius:0}
 .tb-item svg{width:24px;height:24px}
-.tb-item span{line-height:1.1}
+.tb-item span{line-height:1.1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tabbar{transition:transform .3s ease,opacity .25s ease}
 .tabbar.tb-hidden{transform:translateY(160%);opacity:0;pointer-events:none}
 .tb-item.on{color:var(--accent);background:var(--glass-select);border-radius:24px}
@@ -496,6 +496,23 @@ details#asideQuestions{border:0;border-radius:var(--radius);box-shadow:var(--sha
 @media (prefers-color-scheme: dark){
   body{background:#000}
 }
+/* Baremo */
+.brm-sec{background:var(--surface);border-radius:14px;padding:14px;margin-bottom:14px}
+.brm-sec h3{margin:0 0 4px;font-size:15px}
+.brm-sec .brm-max{font-size:12px;color:var(--muted);margin:0 0 8px}
+.brm-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:.5px solid var(--line)}
+.brm-row:last-child{border-bottom:0}
+.brm-row label{font-size:13.5px;color:var(--ink2);min-width:0}
+.brm-row .brm-pts{flex:0 0 auto;font-size:11.5px;color:var(--muted);white-space:nowrap}
+.brm-row input,.brm-row select{width:86px;flex:0 0 auto;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);padding:6px 8px;font-size:13px;text-align:right;outline:none}
+.brm-row select{text-align:left;width:auto;max-width:190px}
+.brm-row input:focus,.brm-row select:focus{border-color:var(--accent)}
+.brm-total{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--surface);border-radius:14px;font-size:15px;font-weight:700}
+.brm-total b{font-size:22px;color:var(--accent)}
+.brm-note{font-size:12.5px;color:var(--muted);margin-top:10px;line-height:1.5}
+.brm-note a{color:var(--accent)}
+.brm-sub{font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:12px 0 2px}
+
 /* Móvil: cabecera de una sola línea (título, idioma y avatar con la inicial) */
 @media (max-width:899px){
   header{flex-wrap:nowrap;position:sticky;padding:calc(6px + env(safe-area-inset-top)) 14px 6px}
@@ -653,6 +670,21 @@ details#asideQuestions{border:0;border-radius:var(--radius);box-shadow:var(--sha
         <div id="statsBody"></div>
       </section>
 
+      <!-- Cálculo del baremo de méritos (Anexo III, Resolución 1679/2026) -->
+      <section id="pageBaremo" class="page-card card" hidden>
+        <div class="page-head">
+          <div>
+            <h2>Baremo</h2>
+            <p>Cálculo de méritos del Anexo III · Resolución 1679/2026 (médico/a familia-EAP).</p>
+          </div>
+          <button class="btn" id="baremoReset" type="button">Borrar</button>
+        </div>
+        <div id="baremoBody"></div>
+        <div class="brm-note">
+          <a href="https://www.euskadi.eus/web01-bopv/es/bopv2/datos/2026/10/2604577a.shtml" target="_blank" rel="noopener">Ver la resolución en el BOPV</a><span>· Es un cálculo orientativo; la puntuación definitiva la otorga el tribunal. Las respuestas incorrectas del examen no conllevan penalización.</span>
+        </div>
+      </section>
+
       <section id="pageAdmin" class="page-card card" hidden>
         <div class="page-head">
           <div>
@@ -689,6 +721,10 @@ details#asideQuestions{border:0;border-radius:var(--radius);box-shadow:var(--sha
   <button class="mm-item tb-item" type="button" data-page="ranking">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
     <span>Fallos</span>
+  </button>
+  <button class="mm-item tb-item" type="button" data-page="baremo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2.5"/><path d="M9 7h6M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01M8.5 15h.01M12 15h.01M15.5 15h.01M8.5 18h.01M12 18h.01M15.5 18h.01"/></svg>
+    <span>Baremo</span>
   </button>
   <button class="mm-item tb-item" type="button" id="tbAccount">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.4-3.4 4-5 7-5s5.6 1.6 7 5"/></svg>
