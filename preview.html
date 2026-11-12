@@ -56,6 +56,9 @@ select{border:1px solid var(--line);background:#f8fafd;border-radius:8px;padding
 .qitem.ok .dot{background:var(--ok)} .qitem.bad .dot{background:var(--bad)}
 .qitem.cur .dot{background:#fff}
 .aside-foot{padding:9px 12px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+.review-btn{width:100%;margin-top:9px;padding:8px 10px;font-size:12.5px;background:var(--accent-soft);border-color:#c9d6f4;color:var(--accent)}
+.review-btn:hover{background:#dbe6ff;border-color:#a9bdf0}
+.kbd-hint{margin:12px 2px 0;font-size:11.5px;color:var(--muted)}
 
 /* ---------- main ---------- */
 main{min-width:0}
@@ -201,6 +204,18 @@ kbd{background:#eef2f8;border:1px solid #d9e1ee;border-bottom-width:2px;border-r
 .auth-form input,.auth-form textarea{border:1px solid var(--line);background:#f8fafd;border-radius:9px;padding:10px 11px;font:inherit;font-size:14px;color:var(--ink);outline:none;width:100%;text-transform:none;letter-spacing:normal}
 .auth-form input:focus,.auth-form textarea:focus{border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px var(--accent-soft)}
 .auth-form textarea{resize:vertical}
+.terms-check{display:flex !important;grid-template-columns:none !important;flex-direction:row !important;align-items:flex-start;gap:9px;font-size:12.5px !important;font-weight:500 !important;text-transform:none !important;letter-spacing:normal !important;color:var(--ink) !important;line-height:1.45;cursor:pointer}
+.terms-check[hidden]{display:none !important}
+.terms-check input{width:17px !important;height:17px !important;margin:1px 0 0;flex:0 0 auto;accent-color:var(--accent);padding:0 !important}
+.terms-box{border:1px solid var(--line);border-radius:10px;background:#f8fafd;font-size:12px;line-height:1.5;color:#33415c}
+.terms-box summary{padding:9px 12px;cursor:pointer;font-weight:600;color:var(--accent);list-style:none}
+.terms-box summary::-webkit-details-marker{display:none}
+.terms-box summary::before{content:"▸ ";display:inline-block;transition:transform .15s}
+.terms-box[open] summary::before{content:"▾ "}
+.terms-text{padding:0 14px 12px;max-height:210px;overflow:auto;border-top:1px solid var(--line)}
+.terms-text p{margin:9px 0}
+.terms-text ul{margin:6px 0;padding-left:18px}
+.terms-text li{margin:4px 0}
 .auth-msg{font-size:12.5px;min-height:1px;line-height:1.45}
 .auth-msg.err{color:var(--bad)}
 .auth-msg.ok{color:var(--ok)}
@@ -363,6 +378,7 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
             </label>
             <button class="btn" id="newAttemptBtn" type="button">+ Nuevo</button>
           </div>
+          <button class="btn review-btn" id="wrongOnlyBtn" type="button">Repasar falladas</button>
         </div>
         <div class="qlist" id="qlist"></div>
         <div class="aside-foot">
@@ -380,16 +396,7 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
         <div class="card" id="card">
           <div class="empty">Cargando⬦</div>
         </div>
-        <div class="card" id="toolsCard" style="padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-          <div style="font-size:12px;color:var(--muted)">
-            Teclado: <kbd>1</kbd>&ndash;<kbd>4</kbd> o <kbd>a</kbd>&ndash;<kbd>d</kbd> responder &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> navegar &middot; <kbd>Enter</kbd> siguiente
-          </div>
-          <div class="toolbar">
-            <button class="btn" id="statsBtn">Preguntas más falladas</button>
-            <button class="btn" id="wrongOnlyBtn">Repasar falladas</button>
-            <button class="btn" id="clearBtn">Borrar intentos</button>
-          </div>
-        </div>
+        <p class="kbd-hint">Teclado: <kbd>1</kbd>&ndash;<kbd>4</kbd> o <kbd>a</kbd>&ndash;<kbd>d</kbd> responder &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> navegar &middot; <kbd>Enter</kbd> siguiente</p>
       </section>
 
       <section id="pageBib" class="page-card card" hidden>
@@ -431,7 +438,7 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
 
 <!-- Iniciar sesión / crear cuenta -->
 <div class="modal" id="authModal">
-  <div class="modal-card" style="max-width:430px">
+  <div class="modal-card" style="max-width:540px">
     <div class="modal-head">
       <h3 id="authTitle">Iniciar sesión</h3>
       <button class="btn" id="authClose" type="button">Cerrar</button>
@@ -451,9 +458,29 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
         <label>Contraseña
           <input id="authPass" type="password" autocomplete="current-password" required minlength="6" placeholder="Mínimo 6 caracteres">
         </label>
+        <label class="terms-check" id="termsField" hidden>
+          <input id="authTerms" type="checkbox">
+          <span>Acepto las <b>condiciones de uso y la política de datos</b>.</span>
+        </label>
+        <details class="terms-box" id="termsBox" hidden>
+          <summary>Qué hace y qué guarda esta web</summary>
+          <div class="terms-text">
+            <p><b>Uso personal y no comercial.</b> Esta web es una herramienta de práctica para la OPE de Osakidetza. No tiene publicidad, no vende datos ni los comparte con terceros con fines comerciales.</p>
+            <p><b>Qué guarda si no inicias sesión:</b> solo en el almacenamiento local de tu navegador (localStorage) tus respuestas, intentos y preferencias. Esa información no se envía a ningún servidor y puedes borrarla borrando los datos del sitio en tu navegador.</p>
+            <p><b>Qué guarda si creas una cuenta:</b></p>
+            <ul>
+              <li><b>Cuenta:</b> email, nombre visible, contraseña (cifrada y gestionada por Supabase; la web nunca la guarda en claro) y fecha de alta.</li>
+              <li><b>Progreso:</b> intentos y respuestas, para sincronizarlos entre dispositivos.</li>
+              <li><b>Confirmaciones:</b> si confirmas una respuesta o propones una corrección, se guarda la pregunta, la opción propuesta, tu comentario y la fecha.</li>
+              <li><b>Ranking:</b> las estadísticas de fallos se muestran de forma agregada; no se publica qué usuario falló cada pregunta.</li>
+            </ul>
+            <p><b>Servicios utilizados:</b> GitHub Pages para alojar la web y Supabase para la autenticación y la base de datos. No se usan cookies publicitarias ni herramientas de analítica de terceros.</p>
+            <p><b>Conservación:</b> los datos se conservarán mientras se use la web para preparar la OPE. <b>Una vez finalizada la OPE se borrarán todos los datos</b> (cuentas, intentos y confirmaciones). También puedes solicitar el borrado de tu cuenta y tus datos antes de esa fecha contactando con el administrador del sitio.</p>
+          </div>
+        </details>
         <div class="auth-msg" id="authMsg"></div>
         <button class="btn primary" id="authSubmit" type="submit">Entrar</button>
-        <div class="auth-help">Las confirmaciones y el progreso se guardan en tu cuenta. Puedes crear la cuenta y entrar directamente.</div>
+        <div class="auth-help">Las confirmaciones y el progreso se guardan en tu cuenta. Puedes crear la cuenta y entrar directamente.<br><b>Uso personal y no comercial.</b> Al finalizar la OPE se borrarán todos los datos.</div>
       </form>
     </div>
   </div>
@@ -1218,6 +1245,13 @@ window.OPE_CONFIG = {
     $('#authTitle').textContent = signup ? 'Crear cuenta' : 'Iniciar sesión';
     $('#authSubmit').textContent = signup ? 'Crear cuenta' : 'Entrar';
     $('#nameField').hidden = !signup;
+    $('#termsField').hidden = !signup;
+    $('#termsBox').hidden = !signup;
+    $('#termsBox').open = signup;
+    if (!signup) {
+      $('#authTerms').checked = false;
+      $('#termsBox').open = false;
+    }
     $('#authPass').autocomplete = signup ? 'new-password' : 'current-password';
     $('#authMsg').textContent = '';
     $('#authMsg').className = 'auth-msg';
@@ -1235,15 +1269,26 @@ window.OPE_CONFIG = {
     const email = $('#authEmail').value.trim();
     const pass = $('#authPass').value;
     const name = $('#authName').value.trim();
+    if (authMode === 'signup' && !$('#authTerms').checked) {
+      setAuthMsg('Para crear la cuenta tienes que aceptar las condiciones de uso y la política de datos.', 'err');
+      return;
+    }
     const btn = $('#authSubmit');
     btn.disabled = true;
     setAuthMsg('');
     try {
       if (authMode === 'signup') {
+        if (!$('#termsBox').open) $('#termsBox').open = true;
         const { data, error } = await SB.auth.signUp({
           email,
           password: pass,
-          options: { data: { display_name: name || email.split('@')[0] } }
+          options: {
+            data: {
+              display_name: name || email.split('@')[0],
+              terms_accepted_at: new Date().toISOString(),
+              terms_version: '2026-11'
+            }
+          }
         });
         if (error) throw error;
         if (data.session) {
@@ -2157,27 +2202,8 @@ window.OPE_CONFIG = {
   $('#wrongOnlyBtn').onclick = () => {
     state.status = 'wrong'; $('#fStatus').value = 'wrong'; renderList();
     const arr = poolUnits();
-    if (arr.length) goUnit(arr[0]);
+    if (arr.length) { goUnit(arr[0]); closeSidebar(); }
     else alert('No hay preguntas falladas todavía.');
-  };
-  $('#clearBtn').onclick = async () => {
-    const groups = groupsFor(state.bat);
-    if (!groups.length) { alert('No hay intentos en esta batería.'); return; }
-    if (!confirm('¿Borrar todos los intentos de esta batería?')) return;
-    const ids = groups.map(g => g.id);
-    store.groups = store.groups.filter(g => g.battery !== state.bat);
-    store.active[state.bat] = null;
-    if (state.reviewGroupId && ids.includes(state.reviewGroupId)) state.reviewGroupId = null;
-    save();
-    if (SB && session) {
-      const { error } = await SB.from('attempt_groups').delete()
-        .eq('user_id', session.user.id)
-        .eq('battery', state.bat);
-      if (error) toast('Borrado en local, pero no en Supabase: ' + error.message, 'err');
-    }
-    renderAttemptSelect();
-    renderAll(false);
-    toast('Intentos borrados', 'ok');
   };
   $('#menuBtn').onclick = () => {
     const s = $('#sidebar');
@@ -2223,8 +2249,7 @@ window.OPE_CONFIG = {
     };
   });
 
-  // Ranking de fallos (página normal dentro de la app)
-  $('#statsBtn').onclick = () => setPage('ranking', { push: true });
+  // Ranking de fallos (página normal dentro de la app, accesible desde el menú lateral)
   $('#statsBat').onchange = (e) => { statsBat = e.target.value; loadFailureStats(); };
   document.querySelectorAll('[data-stats]').forEach(t => {
     t.onclick = () => {

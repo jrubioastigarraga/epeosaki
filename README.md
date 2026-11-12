@@ -187,7 +187,19 @@ bibliografia/           leyes, guías y manuales (lectores + PDF)
 
 ---
 
-## 7. Notas
+## 7. Condiciones de uso y datos
+
+La web es una herramienta de **uso personal y no comercial** para preparar la OPE de Osakidetza. No tiene publicidad ni vende o comparte datos con terceros con fines comerciales.
+
+- **Sin cuenta:** las respuestas, intentos y preferencias se guardan solo en `localStorage`, en el navegador. No se envían a ningún servidor.
+- **Con cuenta:** se guardan en Supabase el email, el nombre visible, la contraseña cifrada (la web nunca la almacena en claro), la fecha de alta, los intentos y respuestas, y las confirmaciones o correcciones con su comentario y fecha. La aceptación de estas condiciones queda registrada en los metadatos de la cuenta.
+- **Ranking:** solo se publican datos agregados de fallos; no se muestra qué usuario falló cada pregunta.
+- **Servicios:** GitHub Pages (alojamiento) y Supabase (autenticación y base de datos). Sin cookies publicitarias ni analítica de terceros.
+- **Conservación:** los datos se mantienen mientras se use la web para preparar la OPE. **Una vez finalizada la OPE se borrarán todos los datos** (cuentas, intentos y confirmaciones). También se puede solicitar el borrado antes contactando con el administrador.
+
+---
+
+## 8. Notas
 
 - Las respuestas del dataset son deducidas y no son una plantilla oficial. El campo `confidence` muestra la seguridad con la que se propuso cada respuesta; las confirmaciones de usuarios son independientes de ese valor.
 - La agrupación de casos clínicos usa el campo `caso` del dataset y muestra solo el enunciado del caso, sin repetir dentro las preguntas y opciones.

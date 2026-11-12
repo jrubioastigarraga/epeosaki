@@ -686,6 +686,13 @@
     $('#authTitle').textContent = signup ? 'Crear cuenta' : 'Iniciar sesión';
     $('#authSubmit').textContent = signup ? 'Crear cuenta' : 'Entrar';
     $('#nameField').hidden = !signup;
+    $('#termsField').hidden = !signup;
+    $('#termsBox').hidden = !signup;
+    $('#termsBox').open = signup;
+    if (!signup) {
+      $('#authTerms').checked = false;
+      $('#termsBox').open = false;
+    }
     $('#authPass').autocomplete = signup ? 'new-password' : 'current-password';
     $('#authMsg').textContent = '';
     $('#authMsg').className = 'auth-msg';
@@ -703,15 +710,26 @@
     const email = $('#authEmail').value.trim();
     const pass = $('#authPass').value;
     const name = $('#authName').value.trim();
+    if (authMode === 'signup' && !$('#authTerms').checked) {
+      setAuthMsg('Para crear la cuenta tienes que aceptar las condiciones de uso y la política de datos.', 'err');
+      return;
+    }
     const btn = $('#authSubmit');
     btn.disabled = true;
     setAuthMsg('');
     try {
       if (authMode === 'signup') {
+        if (!$('#termsBox').open) $('#termsBox').open = true;
         const { data, error } = await SB.auth.signUp({
           email,
           password: pass,
-          options: { data: { display_name: name || email.split('@')[0] } }
+          options: {
+            data: {
+              display_name: name || email.split('@')[0],
+              terms_accepted_at: new Date().toISOString(),
+              terms_version: '2026-11'
+            }
+          }
         });
         if (error) throw error;
         if (data.session) {
@@ -1625,27 +1643,8 @@
   $('#wrongOnlyBtn').onclick = () => {
     state.status = 'wrong'; $('#fStatus').value = 'wrong'; renderList();
     const arr = poolUnits();
-    if (arr.length) goUnit(arr[0]);
+    if (arr.length) { goUnit(arr[0]); closeSidebar(); }
     else alert('No hay preguntas falladas todavía.');
-  };
-  $('#clearBtn').onclick = async () => {
-    const groups = groupsFor(state.bat);
-    if (!groups.length) { alert('No hay intentos en esta batería.'); return; }
-    if (!confirm('¿Borrar todos los intentos de esta batería?')) return;
-    const ids = groups.map(g => g.id);
-    store.groups = store.groups.filter(g => g.battery !== state.bat);
-    store.active[state.bat] = null;
-    if (state.reviewGroupId && ids.includes(state.reviewGroupId)) state.reviewGroupId = null;
-    save();
-    if (SB && session) {
-      const { error } = await SB.from('attempt_groups').delete()
-        .eq('user_id', session.user.id)
-        .eq('battery', state.bat);
-      if (error) toast('Borrado en local, pero no en Supabase: ' + error.message, 'err');
-    }
-    renderAttemptSelect();
-    renderAll(false);
-    toast('Intentos borrados', 'ok');
   };
   $('#menuBtn').onclick = () => {
     const s = $('#sidebar');
@@ -1691,8 +1690,7 @@
     };
   });
 
-  // Ranking de fallos (página normal dentro de la app)
-  $('#statsBtn').onclick = () => setPage('ranking', { push: true });
+  // Ranking de fallos (página normal dentro de la app, accesible desde el menú lateral)
   $('#statsBat').onchange = (e) => { statsBat = e.target.value; loadFailureStats(); };
   document.querySelectorAll('[data-stats]').forEach(t => {
     t.onclick = () => {
