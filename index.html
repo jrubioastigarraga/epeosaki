@@ -370,6 +370,7 @@ details#asideQuestions{display:block;background:var(--panel);border:1px solid va
   --ok:#248A3D; --ok-soft:#E3F6E8; --bad:#D70015; --bad-soft:#FFE9E7;
   --warn:#9A5B00; --warn-soft:#FFF4DC;
   --glass:rgba(249,249,249,.72); --glass-edge:rgba(255,255,255,.7); --glass-select:rgba(0,0,0,.07);
+  --tabbar:rgba(249,249,249,.55);
   --radius:22px; --shadow:0 1px 3px rgba(0,0,0,.06);
 }
 @media (prefers-color-scheme: dark){
@@ -379,6 +380,7 @@ details#asideQuestions{display:block;background:var(--panel);border:1px solid va
     --ok:#30D158; --ok-soft:#10301A; --bad:#FF453A; --bad-soft:#3A1412;
     --warn:#FFD60A; --warn-soft:#3A3010;
     --glass:rgba(60,60,64,.74); --glass-edge:rgba(255,255,255,.28); --glass-select:rgba(0,0,0,.45);
+    --tabbar:rgba(60,60,64,.5);
     --shadow:inset 0 0 0 .5px rgba(255,255,255,.14);
   }
 }
@@ -454,7 +456,7 @@ details#asideQuestions{border:0;border-radius:var(--radius);box-shadow:var(--sha
 .toast{bottom:calc(96px + env(safe-area-inset-bottom));border-radius:14px}
 
 /* Barra de pestañas inferior */
-.tabbar{position:fixed;left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:50;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px;background:var(--glass);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border-radius:32px;border:.5px solid var(--glass-edge);box-shadow:inset 0 1px 0 var(--glass-edge),0 8px 28px rgba(0,0,0,.18);padding:6px}
+.tabbar{position:fixed;left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:50;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px;background:var(--tabbar);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border-radius:32px;border:.5px solid var(--glass-edge);box-shadow:inset 0 1px 0 var(--glass-edge),0 8px 28px rgba(0,0,0,.18);padding:6px}
 .tb-item{display:flex;flex-direction:column;align-items:center;gap:2px;border:0;background:none;color:var(--muted);font-size:10px;font-weight:500;padding:4px 0;border-radius:0}
 .tb-item svg{width:24px;height:24px}
 .tb-item span{line-height:1.1}
