@@ -1,4 +1,4 @@
-# OPE Osakidetza — práctica de preguntas
+# epeosaki — práctica de preguntas OPE Osakidetza
 
 Sitio estático (GitHub Pages) con 700 preguntas tipo test:
 
@@ -67,9 +67,9 @@ En **Authentication → Providers → Email**:
 
 - Deja habilitado **Email**.
 - Para probar rápido, desactiva **Confirm email** (los usuarios podrán entrar sin confirmar el correo).
-- Si mantienes la confirmación por email, en **Authentication → URL Configuration** pon la URL de tu web en **Site URL** y añádela también en **Redirect URLs** (por ejemplo `https://tu-usuario.github.io/ope-ana-web/`).
+- Si mantienes la confirmación por email, en **Authentication → URL Configuration** pon la URL de tu web en **Site URL** y añádela también en **Redirect URLs** (por ejemplo `https://tu-usuario.github.io/epeosaki/`).
 
-> En `ope_ana` ya está configurado: **Site URL** = `https://jrubioastigarraga.github.io/ope-ana-web/`, la URL de GitHub Pages está en **Redirect URLs** y **Confirm email** está desactivado para que el registro sea inmediato.
+> En `ope_ana` ya está configurado: **Site URL** = `https://jrubioastigarraga.github.io/epeosaki/`, la URL de GitHub Pages está en **Redirect URLs** y **Confirm email** está desactivado para que el registro sea inmediato.
 
 ### 1.5 Crear el primer administrador
 

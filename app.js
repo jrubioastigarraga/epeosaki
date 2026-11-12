@@ -164,6 +164,7 @@
   const state = {
     bat: 'comun',
     uid: 'comun-1',
+    page: 'preguntas',      // 'preguntas' | 'bibliografia' | 'ranking'
     view: 'q',              // 'q' | 'case'
     caseId: null,
     text: '',
@@ -1154,6 +1155,68 @@
     renderCard(preserveScroll);
     renderList();
     updateStats();
+    renderCrumbs();
+  }
+
+  // ============================================================
+  //  Páginas, menú lateral y migas de pan
+  // ============================================================
+  const PAGES = ['preguntas', 'bibliografia', 'ranking'];
+
+  function renderCrumbs() {
+    const box = $('#crumbs');
+    if (!box) return;
+    const sep = '<span class="sep">/</span>';
+    const home = '<button type="button" data-page="preguntas">Inicio</button>';
+    let html = home;
+    if (state.page === 'bibliografia') {
+      html += sep + '<span aria-current="page">Bibliografía</span>';
+    } else if (state.page === 'ranking') {
+      html += sep + '<span aria-current="page">Preguntas más falladas</span>';
+    } else {
+      let current = 'Preguntas';
+      if (state.view === 'case') {
+        current = 'Caso clínico ' + state.caseId;
+      } else {
+        const q = questions[state.uid];
+        if (q) current = 'Pregunta ' + q.numero;
+      }
+      html += sep + '<button type="button" data-page="preguntas">Preguntas</button>' +
+        sep + `<span aria-current="page">${esc(current)}</span>`;
+    }
+    box.innerHTML = html;
+    box.querySelectorAll('[data-page]').forEach(b => {
+      b.onclick = () => setPage(b.dataset.page);
+    });
+  }
+
+  function setPage(page, opts) {
+    opts = opts || {};
+    if (!PAGES.includes(page)) page = 'preguntas';
+    state.page = page;
+    const onQuestions = page === 'preguntas';
+    $('#pageQuestions').hidden = !onQuestions;
+    $('#pageBib').hidden = page !== 'bibliografia';
+    $('#pageRanking').hidden = page !== 'ranking';
+    $('#asideQuestions').hidden = !onQuestions;
+    document.querySelectorAll('.mm-item').forEach(b => {
+      const on = b.dataset.page === page;
+      b.classList.toggle('on', on);
+      if (on) b.setAttribute('aria-current', 'page');
+      else b.removeAttribute('aria-current');
+    });
+    renderCrumbs();
+    closeSidebar();
+    if (!opts.skipHash) {
+      const hash = onQuestions ? (state.uid ? '#' + state.uid : '') : '#/' + page;
+      try {
+        if (opts.push) history.pushState(null, '', hash);
+        else history.replaceState(null, '', hash);
+      } catch (e) { /* file:// */ }
+    }
+    if (page === 'bibliografia') renderBib($('#bibSearch').value || '');
+    else if (page === 'ranking') openStats();
+    else if (opts.render !== false) renderAll(false);
   }
 
   // ============================================================
@@ -1198,12 +1261,14 @@
   function go(uid) {
     const q = questions[uid];
     if (!q) return;
+    if (state.page !== 'preguntas') setPage('preguntas', { skipHash: true, render: false });
     state.uid = uid;
     if (q.caso != null) { state.view = 'case'; state.caseId = q.caso; }
     else { state.view = 'q'; state.caseId = null; }
     try { history.replaceState(null, '', '#' + uid); } catch (e) { /* file:// */ }
     renderCard(false);
     renderList();
+    renderCrumbs();
   }
 
   function goUnit(u) {
@@ -1235,11 +1300,15 @@
     document.body.style.width = '100%';
     document.body.classList.add('menu-open');
     $('#sidebar').classList.add('open');
+    const backdrop = $('#navBackdrop');
+    if (backdrop) backdrop.hidden = false;
   }
 
   function closeSidebar(resetScroll) {
     const wasLocked = document.body.style.position === 'fixed';
     $('#sidebar').classList.remove('open');
+    const backdrop = $('#navBackdrop');
+    if (backdrop) backdrop.hidden = true;
     document.body.classList.remove('menu-open');
     document.body.style.position = '';
     document.body.style.top = '';
@@ -1426,7 +1495,6 @@
     body.innerHTML = html;
     body.querySelectorAll('.fail-row').forEach(btn => {
       btn.onclick = () => {
-        $('#statsModal').classList.remove('open');
         goToStatQuestion(btn.dataset.uid);
       };
     });
@@ -1471,6 +1539,7 @@
     const q = questions[uid];
     if (!q) return;
     state.reviewGroupId = null;
+    setPage('preguntas', { skipHash: true, render: false });
     if (q.bat !== state.bat) {
       state.view = 'q';
       state.caseId = null;
@@ -1484,7 +1553,6 @@
     statsBat = 'all';
     document.querySelectorAll('[data-stats]').forEach(t => t.classList.toggle('on', t.dataset.stats === 'global'));
     $('#statsBat').value = 'all';
-    $('#statsModal').classList.add('open');
     loadFailureStats();
   }
 
@@ -1590,16 +1658,15 @@
     if (window.innerWidth > 900) closeSidebar();
   });
 
-  // Bibliografía
-  $('#bibBtn').onclick = () => {
-    renderBib('');
-    $('#bibSearch').value = '';
-    $('#bibModal').classList.add('open');
-    $('#bibSearch').focus();
-  };
-  $('#bibClose').onclick = () => $('#bibModal').classList.remove('open');
-  $('#bibModal').onclick = (e) => { if (e.target.id === 'bibModal') $('#bibModal').classList.remove('open'); };
+  // Bibliografía (página normal dentro de la app)
+  $('#bibBtn').onclick = () => setPage('bibliografia', { push: true });
   $('#bibSearch').oninput = (e) => renderBib(e.target.value);
+
+  // Menú lateral: navegación entre páginas
+  document.querySelectorAll('.mm-item').forEach(b => {
+    b.onclick = () => setPage(b.dataset.page, { push: true });
+  });
+  $('#navBackdrop').onclick = () => closeSidebar();
 
   // Autenticación
   document.querySelectorAll('[data-auth]').forEach(t => {
@@ -1626,10 +1693,8 @@
     };
   });
 
-  // Ranking de fallos
-  $('#statsBtn').onclick = () => openStats();
-  $('#statsClose').onclick = () => $('#statsModal').classList.remove('open');
-  $('#statsModal').onclick = (e) => { if (e.target.id === 'statsModal') $('#statsModal').classList.remove('open'); };
+  // Ranking de fallos (página normal dentro de la app)
+  $('#statsBtn').onclick = () => setPage('ranking', { push: true });
   $('#statsBat').onchange = (e) => { statsBat = e.target.value; loadFailureStats(); };
   document.querySelectorAll('[data-stats]').forEach(t => {
     t.onclick = () => {
@@ -1651,7 +1716,7 @@
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
-      ['#bibModal', '#authModal', '#disputeModal', '#adminModal', '#statsModal'].forEach(s => {
+      ['#authModal', '#disputeModal', '#adminModal'].forEach(s => {
         const n = $(s); if (n) n.classList.remove('open');
       });
       closeSidebar();
@@ -1659,6 +1724,7 @@
     }
     if (e.target.matches('input,select,textarea')) return;
     if ($('.modal.open')) return;
+    if (state.page !== 'preguntas') return;
     const q = questions[state.uid]; if (!q) return;
     const a = viewAnswers()[q.uid];
     const k = e.key.toLowerCase();
@@ -1671,8 +1737,28 @@
   // ============================================================
   //  Arranque
   // ============================================================
+  function routeFromHash() {
+    const h = (() => { try { return decodeURIComponent(location.hash.replace('#', '')); } catch (e) { return ''; } })();
+    if (h === '/bibliografia' || h === '/ranking') {
+      setPage(h.slice(1), { skipHash: true, render: true });
+      return;
+    }
+    if (questions[h]) {
+      const q = questions[h];
+      state.reviewGroupId = null;
+      if (q.bat !== state.bat) applyBatteryUI(q.bat);
+      go(h);
+      return;
+    }
+    if (state.page !== 'preguntas') setPage('preguntas', { skipHash: true, render: true });
+  }
+  window.addEventListener('hashchange', routeFromHash);
+
   const hash = (() => { try { return decodeURIComponent(location.hash.replace('#', '')); } catch (e) { return ''; } })();
-  if (questions[hash]) {
+  let startPage = 'preguntas';
+  if (hash === '/bibliografia' || hash === '/ranking') {
+    startPage = hash.slice(1);
+  } else if (questions[hash]) {
     state.uid = hash;
     state.bat = questions[hash].bat;
     if (questions[hash].caso != null) { state.view = 'case'; state.caseId = questions[hash].caso; }
@@ -1682,6 +1768,7 @@
   renderTopics();
   renderAttemptSelect();
   renderAll(false);
+  if (startPage !== 'preguntas') setPage(startPage, { skipHash: true, render: true });
   renderAuthUI();
   initSupabase();
 })();
