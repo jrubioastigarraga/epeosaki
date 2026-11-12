@@ -2,6 +2,8 @@
   'use strict';
 
   // Datos embebidos: se usan como respaldo si Supabase no está disponible.
+  const APP = document.body.dataset.app || 'inicio';
+  const appFor = (p) => (p === 'preguntas' ? 'preguntas' : 'inicio');
   const datasetEl = document.getElementById('dataset');
   const EMBEDDED = datasetEl ? JSON.parse(datasetEl.textContent || '{}') : {};
   let RAW = EMBEDDED;
@@ -826,6 +828,8 @@
     if (!box) return;
     const adminItem = $('#adminMenuItem');
     if (adminItem) adminItem.hidden = !canAdmin();
+    const adminTop = $('#adminTopLink');
+    if (adminTop) adminTop.hidden = !canAdmin();
     if (!HAS_CONFIG) {
       box.innerHTML = '<button class="btn" id="authBtn" type="button" title="Configura Supabase para activar el registro y las confirmaciones">Iniciar sesión</button>';
       $('#authBtn').onclick = () => openAuth();
@@ -1557,6 +1561,11 @@
       opts.skipHash = false;
       toast('El panel de administración solo está disponible para administradores.', 'err');
     }
+    if (appFor(page) !== APP) {
+      const file = page === 'preguntas' ? 'preguntas.html' : 'index.html';
+      location.href = file + (page === 'preguntas' || page === 'inicio' ? '' : '#/' + page);
+      return;
+    }
     state.page = page;
     const onQuestions = page === 'preguntas';
     $('#pageHome').hidden = page !== 'inicio';
@@ -1935,6 +1944,7 @@
   function goToStatQuestion(uid) {
     const q = questions[uid];
     if (!q) return;
+    if (APP !== 'preguntas') { location.href = 'preguntas.html#' + uid; return; }
     state.reviewGroupId = null;
     setPage('preguntas', { skipHash: true, render: false });
     if (q.bat !== state.bat) {
@@ -2124,6 +2134,7 @@
   // ============================================================
   function routeFromHash() {
     const h = (() => { try { return decodeURIComponent(location.hash.replace('#', '')); } catch (e) { return ''; } })();
+    if (APP === 'inicio' && questions[h]) { location.href = 'preguntas.html#' + h; return; }
     const page = h.startsWith('/') ? h.slice(1) : '';
     if (PAGES.includes(page) && page !== 'preguntas') {
       setPage(page, { skipHash: true, render: true });
@@ -2141,11 +2152,13 @@
   window.addEventListener('hashchange', routeFromHash);
 
   const hash = (() => { try { return decodeURIComponent(location.hash.replace('#', '')); } catch (e) { return ''; } })();
-  let startPage = 'preguntas';
   const hashPage = hash.startsWith('/') ? hash.slice(1) : '';
+  if (APP === 'inicio' && (questions[hash] || hash === '/preguntas')) { location.replace('preguntas.html' + location.hash); return; }
+  if (APP === 'preguntas' && hashPage && hashPage !== 'preguntas') { location.replace('index.html' + location.hash); return; }
+  let startPage = 'preguntas';
   if (PAGES.includes(hashPage) && hashPage !== 'preguntas') {
     startPage = hashPage;
-  } else if (!hash) {
+  } else if (!hash && APP === 'inicio') {
     startPage = 'inicio';
     autoHome = true;
   } else if (questions[hash]) {

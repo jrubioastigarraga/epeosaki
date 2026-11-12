@@ -197,7 +197,8 @@ GitHub Pages sirve el contenido de la rama configurada (normalmente `main` / ra�
 ## 6. Estructura
 
 ```
-index.html              aplicación (las preguntas se cargan desde Supabase)
+index.html              página de inicio (y lógica de la web)
+preguntas.html          página de preguntas (idéntica a index.html salvo data-app="preguntas"; cualquier cambio en la interfaz hay que copiarlo en ambos)
 app.js                  lógica de la aplicación (casos, usuarios, confirmaciones)
 config.js               URL y clave anon de Supabase
 favicon.svg             icono del sitio

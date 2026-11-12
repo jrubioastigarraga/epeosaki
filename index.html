@@ -320,6 +320,15 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
 .comment-item{display:flex;gap:8px;align-items:flex-start;justify-content:space-between;margin-bottom:6px}
 .comment-item span{white-space:pre-wrap}
 
+/* ---------- páginas separadas (inicio / preguntas) ---------- */
+.topnav{display:flex;gap:6px;flex-wrap:wrap;padding:10px 20px;background:var(--panel);border-bottom:1px solid var(--line)}
+.topnav a{font-size:13px;font-weight:600;color:#3b4759;text-decoration:none;padding:7px 11px;border-radius:9px}
+.topnav a:hover{background:var(--accent-soft);color:var(--accent)}
+.topnav a.on{background:var(--accent);color:#fff}
+body[data-app="inicio"] .topnav{display:none}
+body[data-app="inicio"] #asideQuestions,body[data-app="inicio"] #pageQuestions{display:none !important}
+body[data-app="preguntas"] .mainmenu,body[data-app="preguntas"] #pageHome{display:none !important}
+
 /* ---------- página principal ---------- */
 .home{padding:30px 32px}
 .home-kicker{display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);background:var(--accent-soft);border-radius:99px;padding:3px 10px}
@@ -352,7 +361,7 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
 }
 </style>
 </head>
-<body>
+<body data-app="inicio">
 <div class="app">
   <header>
     <div class="brand">
@@ -370,6 +379,14 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
       <button class="iconbtn mobile-only" id="menuBtn" title="Menú" aria-label="Abrir menú">&#9776;</button>
     </div>
   </header>
+
+  <nav class="topnav" aria-label="Secciones">
+    <a href="index.html">Inicio</a>
+    <a href="preguntas.html" class="on">Preguntas</a>
+    <a href="index.html#/bibliografia">Bibliografía</a>
+    <a href="index.html#/ranking">Preguntas más falladas</a>
+    <a href="index.html#/admin" id="adminTopLink" hidden>Administración</a>
+  </nav>
 
   <div class="banner" id="setupBanner" hidden>
     <span class="banner-txt"><b>Modo local.</b> Configura Supabase para activar usuarios, confirmaciones y sincronización. Instrucciones en el README.</span>
