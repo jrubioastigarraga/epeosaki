@@ -126,6 +126,7 @@
     "Sesión cerrada": "Saioa itxi da",
     "Escribe ELIMINAR para confirmar": "Idatzi ELIMINAR berresteko",
     "Eliminar mi cuenta": "Nire kontua ezabatu",
+    "Mi cuenta": "Nire kontua",
     "Esta acción no se puede deshacer.": "Ekintza hau ezin da desegin.",
     " Se borrarán de forma inmediata tu cuenta, tu email, tus intentos y respuestas, y tus confirmaciones y correcciones. Dejarán de contar en las estadísticas de las preguntas.": "Berehala ezabatuko dira zure kontua, emaila, saiakerak eta erantzunak, eta zure berrespenak eta zuzenketak. Galderen estatistiketan kontatzeari utziko diote.",
     "Bloques guardados": "Blokeak gorde dira",

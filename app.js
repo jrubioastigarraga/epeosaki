@@ -2074,9 +2074,19 @@
 
   // Menú lateral: navegación entre páginas
   document.querySelectorAll('.mm-item').forEach(b => {
+    if (!b.dataset.page) return;
     b.onclick = () => setPage(b.dataset.page, { push: true });
   });
   $('#navBackdrop').onclick = () => closeSidebar();
+
+  // Mi cuenta (abajo en el menú): si hay sesión abre el menú de cuenta; si no, el acceso
+  $('#tbAccount').onclick = (e) => {
+    e.stopPropagation();
+    if (!session) { openAuth('login'); return; }
+    const chip = $('#userChip');
+    if (chip) { chip.click(); return; }
+    openAuth('login');
+  };
 
   // Autenticación
   document.querySelectorAll('[data-auth]').forEach(t => {
