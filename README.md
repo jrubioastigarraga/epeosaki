@@ -3,10 +3,10 @@
 Sitio estático (GitHub Pages) con 1.200 preguntas tipo test:
 
 - **Batería común**: 200 preguntas (temario normativo).
-- **FEM Enfermedades Infecciosas**: 500 preguntas.
+- **INF Enfermedades Infecciosas**: 500 preguntas.
   - Preguntas **451–500** agrupadas en **10 casos clínicos**. Al abrir un caso se muestran de una vez todas sus preguntas (por ejemplo, el caso 1 muestra las preguntas 451–455).
-- **FEM Medicina Interna**: 500 preguntas.
-  - Preguntas **451–500** con **13 casos clínicos**; cada pregunta muestra su enunciado de caso.
+- **Medicina Interna**: 500 preguntas.
+  - Preguntas **451–500** agrupadas en **13 casos clínicos**. Al abrir un caso se muestran de una vez todas sus preguntas.
   - Incluye 2 preguntas defectuosas sin respuesta válida, marcadas para revisión.
 
 Además, la aplicación se conecta a **Supabase** para tener:
@@ -151,7 +151,7 @@ El botón **Preguntas más falladas** abre un ranking con:
 
 - **Global**: todas las respuestas de todos los usuarios (función `question_failure_stats()`).
 - **Mis fallos**: agregado de todos tus intentos.
-- Filtro por batería (Todas / Común / FEM).
+- Filtro por batería (Todas / Común / INF / MI).
 - Número de fallos, número de intentos y porcentaje de fallo.
 - Al pulsar una fila se abre esa pregunta.
 

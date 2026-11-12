@@ -8,8 +8,8 @@
   const FUENTES = RAW.fuentes || [];
   const BATS = {
     comun: { data: RAW.comun, label: 'Batería común', sub: 'Temario común · 200 preguntas' },
-    fem: { data: RAW.fem, label: 'FEM Enfermedades Infecciosas', sub: 'Temario específico · 500 preguntas' },
-    mi: { data: RAW.mi, label: 'FEM Medicina Interna', sub: 'Medicina Interna · 500 preguntas' }
+    fem: { data: RAW.fem, label: 'INF Enfermedades Infecciosas', sub: 'Enfermedades Infecciosas · 500 preguntas' },
+    mi: { data: RAW.mi, label: 'Medicina Interna', sub: 'Medicina Interna · 500 preguntas' }
   };
   const BAT_KEYS = Object.keys(BATS);
 
@@ -33,32 +33,35 @@
     !/TU-PROYECTO|TU-ANON-KEY/i.test(CONFIG.SUPABASE_URL + ' ' + CONFIG.SUPABASE_ANON_KEY));
 
   // ============================================================
-  //  Agrupación de casos clínicos (FEM 451-500)
+  //  Agrupación de casos clínicos (INF Enfermedades Infecciosas y Medicina Interna)
   // ============================================================
   const cases = {};
-  for (const q of RAW.fem.preguntas) {
+  for (const q of Object.values(questions)) {
     if (q.caso == null) continue;
-    const c = cases[q.caso] || (cases[q.caso] = { id: q.caso, questions: [], contexto: '' });
-    c.questions.push(questions['fem-' + q.numero]);
+    const key = q.bat + ':' + q.caso;
+    const c = cases[key] || (cases[key] = { key: key, id: q.caso, bat: q.bat, questions: [], contexto: '' });
+    c.questions.push(q);
   }
   for (const c of Object.values(cases)) {
     c.questions.sort((a, b) => a.numero - b.numero);
     c.desde = c.questions[0].numero;
     c.hasta = c.questions[c.questions.length - 1].numero;
-    c.contexto = cleanCaseContext(c.questions);
+    c.contexto = c.bat === 'mi'
+      ? String(c.questions[0].contexto || '').trim()
+      : cleanCaseContext(c.questions);
   }
 
   // En el dataset original, la última opción de algunos casos arrastra el
   // enunciado del caso siguiente. Lo recortamos para no mostrar texto ajeno.
   const caseStarts = Object.values(cases)
-    .map(c => ({ id: c.id, text: c.contexto.slice(0, 60) }))
+    .map(c => ({ bat: c.bat, id: c.id, text: c.contexto.slice(0, 60) }))
     .filter(x => x.text.length > 20);
   for (const q of Object.values(questions)) {
     if (!q.opciones) continue;
     for (const k of Object.keys(q.opciones)) {
       const v = q.opciones[k];
       for (const c of caseStarts) {
-        if (c.id === q.caso) continue;
+        if (c.bat === q.bat && c.id === q.caso) continue;
         const i = v.indexOf(c.text);
         if (i > 0) { q.opciones[k] = v.slice(0, i).trim(); break; }
       }
@@ -90,19 +93,22 @@
     const seen = new Set();
     const arr = Object.values(questions).filter(q => q.bat === bat).sort((a, b) => a.numero - b.numero);
     for (const q of arr) {
-      if (bat === 'fem' && q.caso != null) {
-        if (seen.has(q.caso)) continue;
-        seen.add(q.caso);
-        const c = cases[q.caso];
-        list.push({ type: 'case', id: c.id, order: c.desde, desde: c.desde, hasta: c.hasta, questions: c.questions });
-      } else {
-        list.push({ type: 'q', uid: q.uid, order: q.numero, questions: [q] });
+      if (q.caso != null) {
+        const key = bat + ':' + q.caso;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const c = cases[key];
+        if (c) {
+          list.push({ type: 'case', key: key, id: c.id, order: c.desde, desde: c.desde, hasta: c.hasta, questions: c.questions });
+          continue;
+        }
       }
+      list.push({ type: 'q', uid: q.uid, order: q.numero, questions: [q] });
     }
     unitCache[bat] = list;
     return list;
   }
-  const unitKey = (u) => u.type === 'case' ? 'case-' + u.id : u.uid;
+  const unitKey = (u) => u.type === 'case' ? 'case-' + (u.key || u.id) : u.uid;
   function unitForUid(uid) {
     const q = questions[uid];
     if (!q) return null;
@@ -112,7 +118,7 @@
   function topicOf(q) {
     if (q.tema) return q.tema;
     if (q.caso != null) return 'Casos clínicos';
-    if (q.bat === 'fem') return 'FEM · general';
+    if (q.bat === 'fem') return 'INF · general';
     if (q.bat === 'mi') return 'MI · general';
     return 'General';
   }
@@ -982,7 +988,7 @@
         norm(String(q.numero)) + ' ' + norm(q.pregunta) + ' ' +
         Object.values(q.opciones || {}).map(norm).join(' ') + ' ' + norm(q.tema || '')
       ).join(' ');
-      if (unit.type === 'case') hay += ' ' + norm(cases[unit.id].contexto);
+      if (unit.type === 'case') hay += ' ' + norm(cases[unit.key].contexto);
       if (!hay.includes(t)) return false;
     }
     return true;
@@ -1317,7 +1323,8 @@
     } else {
       let current = 'Preguntas';
       if (state.view === 'case') {
-        current = 'Caso clínico ' + state.caseId;
+        const c = cases[state.caseId];
+        current = 'Caso clínico ' + (c ? c.id : state.caseId);
       } else {
         const q = questions[state.uid];
         if (q) current = 'Pregunta ' + q.numero;
@@ -1411,7 +1418,7 @@
     if (!q) return;
     if (state.page !== 'preguntas') setPage('preguntas', { skipHash: true, render: false });
     state.uid = uid;
-    if (q.bat === 'fem' && q.caso != null) { state.view = 'case'; state.caseId = q.caso; }
+    if (q.caso != null) { state.view = 'case'; state.caseId = q.bat + ':' + q.caso; }
     else { state.view = 'q'; state.caseId = null; }
     try { history.replaceState(null, '', '#' + uid); } catch (e) { /* file:// */ }
     renderCard(false);
@@ -1642,7 +1649,7 @@
       const q = questions[r.question_uid];
       if (!q) return;
       const rate = Number(r.failure_rate) || 0;
-      const batLabel = q.bat === 'comun' ? 'Común' : q.bat === 'mi' ? 'MI' : 'FEM';
+      const batLabel = q.bat === 'comun' ? 'Común' : q.bat === 'mi' ? 'MI' : 'INF';
       const caseLabel = q.caso != null ? ` &middot; Caso ${q.caso}` : '';
       const width = Math.max(4, Math.round(r.failures * 100 / maxFail));
       const text = q.pregunta.length > 160 ? q.pregunta.slice(0, 160) + '…' : q.pregunta;
@@ -1726,7 +1733,7 @@
   function renderBib(text) {
     const t = norm(text || '');
     const arr = FUENTES.filter(f => !t || norm(f.titulo + ' ' + (f.ref || '')).includes(t));
-    const groups = { comun: 'Temario común', fem: 'Temario específico (FEM Enfermedades Infecciosas)', mi: 'Temario específico (FEM Medicina Interna)' };
+    const groups = { comun: 'Temario común', fem: 'Temario específico (INF Enfermedades Infecciosas)', mi: 'Temario específico (Medicina Interna)' };
     let html = '';
     for (const g of BAT_KEYS) {
       const items = arr.filter(f => f.grupo === g);
@@ -1903,7 +1910,7 @@
   } else if (questions[hash]) {
     state.uid = hash;
     state.bat = questions[hash].bat;
-    if (questions[hash].bat === 'fem' && questions[hash].caso != null) { state.view = 'case'; state.caseId = questions[hash].caso; }
+    if (questions[hash].caso != null) { state.view = 'case'; state.caseId = questions[hash].bat + ':' + questions[hash].caso; }
   }
   document.querySelectorAll('.tab[data-bat]').forEach(x => x.classList.toggle('on', x.dataset.bat === state.bat));
   $('#subtitle').textContent = BATS[state.bat].sub;
