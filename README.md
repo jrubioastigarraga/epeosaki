@@ -207,6 +207,7 @@ sql/migrate_attempt_groups.sql  migración de progreso antiguo a intentos
 sql/migrate_question_overrides.sql  tabla para corregir respuestas (administradores)
 sql/migrate_add_mi_battery.sql  amplía las restricciones para la batería Medicina Interna
 sql/migrate_user_blocks.sql  bloques elegidos por cada usuario (perfil y cambio desde la cuenta)
+sql/migrate_delete_account.sql  función para eliminar la cuenta y todos sus datos
 sql/migrate_dataset_to_supabase.sql  tablas batteries, questions y bibliography
 tools/seed_supabase.cjs sube a Supabase las preguntas y la bibliografía
 bibliografia/           leyes, guías y manuales (lectores + PDF)
@@ -225,7 +226,8 @@ La web es una herramienta de **uso personal y no comercial** para preparar la OP
 - **Con cuenta:** se guardan en Supabase el email, el nombre visible, la contraseña cifrada (la web nunca la almacena en claro), la fecha de alta, los intentos y respuestas, y las confirmaciones o correcciones con su comentario y fecha. La aceptación de estas condiciones queda registrada en los metadatos de la cuenta.
 - **Ranking:** solo se publican datos agregados de fallos; no se muestra qué usuario falló cada pregunta.
 - **Servicios:** GitHub Pages (alojamiento) y Supabase (autenticación y base de datos). Sin cookies publicitarias ni analítica de terceros.
-- **Conservación:** los datos se mantienen mientras se use la web para preparar la OPE. **Una vez finalizada la OPE se borrarán todos los datos** (cuentas, intentos y confirmaciones). También se puede solicitar el borrado antes contactando con el administrador.
+- **Conservación:** los datos se mantienen mientras se use la web para preparar la OPE. **Una vez finalizada la OPE se borrarán todos los datos** (cuentas, intentos y confirmaciones).
+- **Eliminar la cuenta:** en cualquier momento, desde el menú de usuario (**Eliminar cuenta y datos**). **Se borrará toda la información**: cuenta y email, intentos y respuestas, y confirmaciones y correcciones. El borrado es inmediato e irreversible.
 
 ---
 

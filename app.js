@@ -843,12 +843,14 @@
         <div class="user-menu" id="userMenu" hidden>
           <div class="um-head">${esc(session.user.email || '')}</div>
           <button type="button" id="blocksBtn">Mis bloques</button>
+          <button type="button" id="deleteBtn">Eliminar cuenta y datos</button>
           ${isAdmin ? '<button type="button" id="adminBtn">Panel de administración</button>' : ''}
           <button type="button" id="logoutBtn">Cerrar sesión</button>
         </div>`;
       $('#userChip').onclick = (e) => { e.stopPropagation(); const m = $('#userMenu'); m.hidden = !m.hidden; };
       if (isAdmin) $('#adminBtn').onclick = () => { $('#userMenu').hidden = true; setPage('admin', { push: true }); };
       $('#blocksBtn').onclick = () => { $('#userMenu').hidden = true; openBlocks(); };
+      $('#deleteBtn').onclick = () => { $('#userMenu').hidden = true; openDelete(); };
       $('#logoutBtn').onclick = async () => {
         $('#userMenu').hidden = true;
         if (SB) await SB.auth.signOut();
@@ -893,6 +895,42 @@
     toast('Bloques guardados', 'ok');
     applyBlockVisibility();
     renderAll(true);
+  }
+
+  function openDelete() {
+    if (!session) return openAuth();
+    $('#deleteInput').value = '';
+    $('#deleteMsg').textContent = '';
+    $('#deleteModal').classList.add('open');
+    setTimeout(() => { const i = $('#deleteInput'); if (i) i.focus(); }, 40);
+  }
+
+  async function deleteAccount() {
+    if (!session || !SB) return;
+    if ($('#deleteInput').value.trim().toUpperCase() !== 'ELIMINAR') {
+      $('#deleteMsg').textContent = 'Escribe ELIMINAR para confirmar.';
+      return;
+    }
+    const btn = $('#deleteSubmit');
+    btn.disabled = true;
+    const { error } = await SB.rpc('delete_my_account');
+    btn.disabled = false;
+    if (error) { $('#deleteMsg').textContent = 'No se pudo eliminar la cuenta: ' + error.message; return; }
+    try { await SB.auth.signOut(); } catch (e) { /* la sesión ya no es válida */ }
+    session = null; profile = null; myConf = {}; confirmStats = {};
+    store.groups = [];
+    store.active = { comun: null, fem: null, mi: null };
+    store.owner = null;
+    state.reviewGroupId = null;
+    save();
+    $('#deleteModal').classList.remove('open');
+    await loadConfirmationStats();
+    applyBlockVisibility();
+    setPage('inicio', { render: false });
+    renderAuthUI();
+    renderAttemptSelect();
+    renderAll(false);
+    toast('Tu cuenta y todos tus datos se han eliminado.', 'ok');
   }
 
   function openAuth(mode) {
@@ -2013,6 +2051,12 @@
   $('#blocksSubmit').onclick = saveBlocks;
   $('#blocksModal').onclick = (e) => { if (e.target.id === 'blocksModal') $('#blocksModal').classList.remove('open'); };
 
+  // Eliminar cuenta
+  $('#deleteClose').onclick = () => $('#deleteModal').classList.remove('open');
+  $('#deleteCancel').onclick = () => $('#deleteModal').classList.remove('open');
+  $('#deleteSubmit').onclick = deleteAccount;
+  $('#deleteModal').onclick = (e) => { if (e.target.id === 'deleteModal') $('#deleteModal').classList.remove('open'); };
+
   // Página principal
   $('#homeStart').onclick = () => setPage('preguntas', { push: true });
   $('#homeSignup').onclick = () => openAuth('signup');
@@ -2056,7 +2100,7 @@
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
-      ['#authModal', '#disputeModal', '#blocksModal'].forEach(s => {
+      ['#authModal', '#disputeModal', '#blocksModal', '#deleteModal'].forEach(s => {
         const n = $(s); if (n) n.classList.remove('open');
       });
       closeSidebar();

@@ -463,7 +463,7 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
             </div>
           </div>
           <div class="ai-banner">&#9888; <b>Respuestas generadas con IA.</b> No son una plantilla oficial: verifícalas siempre con la bibliografía y la normativa vigente.</div>
-          <p class="home-foot">Uso personal y no comercial. Sin publicidad. Al finalizar la OPE se borrarán todos los datos de las cuentas.</p>
+          <p class="home-foot">Uso personal y no comercial. Sin publicidad. Puedes eliminar tu cuenta y todos tus datos en cualquier momento desde el menú de tu usuario. Al finalizar la OPE se borrarán todos los datos.</p>
         </div>
       </section>
 
@@ -580,7 +580,8 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
               <li><b>Ranking:</b> las estadísticas de fallos se muestran de forma agregada; no se publica qué usuario falló cada pregunta.</li>
             </ul>
             <p><b>Servicios utilizados:</b> GitHub Pages para alojar la web y Supabase para la autenticación y la base de datos. No se usan cookies publicitarias ni herramientas de analítica de terceros.</p>
-            <p><b>Conservación:</b> los datos se conservarán mientras se use la web para preparar la OPE. <b>Una vez finalizada la OPE se borrarán todos los datos</b> (cuentas, intentos y confirmaciones). También puedes solicitar el borrado de tu cuenta y tus datos antes de esa fecha contactando con el administrador del sitio.</p>
+            <p><b>Conservación:</b> los datos se conservarán mientras se use la web para preparar la OPE. <b>Una vez finalizada la OPE se borrarán todos los datos</b> (cuentas, intentos y confirmaciones).</p>
+            <p><b>Eliminar tu cuenta:</b> puedes eliminarla en cualquier momento desde el menú de tu usuario, en <b>Eliminar cuenta y datos</b>. <b>Se borrará toda la información</b>: tu cuenta y email, tus intentos y respuestas, y tus confirmaciones y correcciones. El borrado es inmediato e irreversible.</p>
           </div>
         </details>
         <div class="auth-msg" id="authMsg"></div>
@@ -611,6 +612,29 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
       <div class="modal-actions">
         <button class="btn" id="disputeCancel" type="button">Cancelar</button>
         <button class="btn primary" id="disputeSubmit" type="button">Enviar corrección</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Eliminar la cuenta y todos sus datos -->
+<div class="modal" id="deleteModal">
+  <div class="modal-card" style="max-width:520px">
+    <div class="modal-head">
+      <h3>Eliminar cuenta y datos</h3>
+      <button class="btn" id="deleteClose" type="button">Cerrar</button>
+    </div>
+    <div class="modal-body">
+      <div class="ai-banner" style="margin:6px 0 12px"><b>Esta acción no se puede deshacer.</b> Se borrarán de forma inmediata tu cuenta, tu email, tus intentos y respuestas, y tus confirmaciones y correcciones. Dejarán de contar en las estadísticas de las preguntas.</div>
+      <form class="auth-form" onsubmit="return false">
+        <label>Escribe ELIMINAR para confirmar
+          <input id="deleteInput" type="text" autocomplete="off" placeholder="ELIMINAR">
+        </label>
+      </form>
+      <div class="auth-msg" id="deleteMsg"></div>
+      <div class="modal-actions">
+        <button class="btn" id="deleteCancel" type="button">Cancelar</button>
+        <button class="btn" id="deleteSubmit" type="button" style="background:var(--bad);border-color:var(--bad);color:#fff">Eliminar mi cuenta</button>
       </div>
     </div>
   </div>

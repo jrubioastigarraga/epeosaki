@@ -186,6 +186,25 @@ $$;
 revoke all on function public.set_my_blocks(text[]) from public;
 grant execute on function public.set_my_blocks(text[]) to authenticated;
 
+-- Eliminar la propia cuenta y todos sus datos (cascada desde auth.users).
+create or replace function public.delete_my_account()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Debes iniciar sesión';
+  end if;
+
+  delete from auth.users where id = auth.uid();
+end;
+$$;
+
+revoke all on function public.delete_my_account() from public;
+grant execute on function public.delete_my_account() to authenticated;
+
 -- Permisos de tabla (las filas siguen limitadas por RLS).
 grant select, update on public.profiles to authenticated;
 grant select, insert, update, delete on public.confirmations to authenticated;
