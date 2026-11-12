@@ -1237,6 +1237,7 @@
   }
 
   function collapsePicker() {
+    if (window.innerWidth >= 900) return;
     const pick = $('#asideQuestions');
     if (pick && pick.open !== undefined) pick.open = false;
   }
@@ -2165,5 +2166,6 @@
   renderAll(false);
   if (startPage !== 'preguntas' && startPage !== 'admin') setPage(startPage, { skipHash: true, render: true });
   renderAuthUI();
+  if (window.innerWidth >= 900) { const pk = $('#asideQuestions'); if (pk) pk.open = true; }
   initSupabase();
 })();
