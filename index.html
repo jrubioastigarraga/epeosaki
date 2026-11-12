@@ -321,13 +321,10 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
 .comment-item span{white-space:pre-wrap}
 
 /* ---------- páginas separadas (inicio / preguntas) ---------- */
-.topnav{display:flex;gap:6px;flex-wrap:wrap;padding:10px 20px;background:var(--panel);border-bottom:1px solid var(--line)}
-.topnav a{font-size:13px;font-weight:600;color:#3b4759;text-decoration:none;padding:7px 11px;border-radius:9px}
-.topnav a:hover{background:var(--accent-soft);color:var(--accent)}
-.topnav a.on{background:var(--accent);color:#fff}
-body[data-app="inicio"] .topnav{display:none}
 body[data-app="inicio"] #asideQuestions,body[data-app="inicio"] #pageQuestions{display:none !important}
-body[data-app="preguntas"] .mainmenu,body[data-app="preguntas"] #pageHome{display:none !important}
+body[data-app="preguntas"] #pageHome{display:none !important}
+#asideQuestions{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:16px;overflow:hidden}
+#asideQuestions .qlist{max-height:260px}
 
 /* ---------- página principal ---------- */
 .home{padding:30px 32px}
@@ -380,14 +377,6 @@ body[data-app="preguntas"] .mainmenu,body[data-app="preguntas"] #pageHome{displa
     </div>
   </header>
 
-  <nav class="topnav" aria-label="Secciones">
-    <a href="index.html">Inicio</a>
-    <a href="preguntas.html" class="on">Preguntas</a>
-    <a href="index.html#/bibliografia">Bibliografía</a>
-    <a href="index.html#/ranking">Preguntas más falladas</a>
-    <a href="index.html#/admin" id="adminTopLink" hidden>Administración</a>
-  </nav>
-
   <div class="banner" id="setupBanner" hidden>
     <span class="banner-txt"><b>Modo local.</b> Configura Supabase para activar usuarios, confirmaciones y sincronización. Instrucciones en el README.</span>
     <a class="btn" href="https://github.com/jrubioastigarraga/epeosaki/blob/main/README.md#1-configurar-supabase" target="_blank" rel="noopener" style="text-decoration:none">Cómo configurarlo</a>
@@ -407,6 +396,42 @@ body[data-app="preguntas"] .mainmenu,body[data-app="preguntas"] #pageHome{displa
         <button class="mm-item" type="button" data-page="ranking"><span class="mm-ic">&#9888;</span>Preguntas más falladas</button>
         <button class="mm-item" type="button" data-page="admin" id="adminMenuItem" hidden><span class="mm-ic">&#9881;</span>Administración</button>
       </nav>
+    </aside>
+    <div class="nav-backdrop" id="navBackdrop" hidden></div>
+
+    <main>
+      <nav class="breadcrumbs" id="crumbs" aria-label="Migas de pan"></nav>
+
+      <section id="pageHome" hidden>
+        <div class="home card">
+          <span class="home-kicker">OPE Osakidetza</span>
+          <h2>Practica tipo test para la oposición de Osakidetza</h2>
+          <p class="home-lead">epeosaki es una herramienta de práctica con preguntas tipo test, casos clínicos y la referencia exacta de la bibliografía donde está cada respuesta.</p>
+          <div class="home-cta">
+            <button class="btn primary" id="homeStart" type="button">Empezar a practicar</button>
+            <button class="btn" id="homeSignup" type="button">Crear cuenta</button>
+            <button class="btn" id="homeLogin" type="button">Iniciar sesión</button>
+          </div>
+          <div class="home-grid">
+            <div class="home-box">
+              <h3>Bloques disponibles</h3>
+              <ul class="home-list" id="homeBats"></ul>
+              <p>Al crear tu cuenta eliges qué bloques quieres trabajar. Puedes cambiarlos en cualquier momento desde <b>Mis bloques</b>, en el menú de tu usuario.</p>
+            </div>
+            <div class="home-box">
+              <h3>Cómo funciona</h3>
+              <ol class="home-list">
+                <li>Responde las preguntas. Cada intento se guarda y puedes revisarlo más tarde.</li>
+                <li>Confirma las respuestas correctas o indica si crees que no lo son. Así ayudas a revisar la base de preguntas.</li>
+                <li>Consulta <b>Preguntas más falladas</b> para ver qué preguntas fallan más los opositores.</li>
+                <li>Tras responder, verás <b>Dónde está la respuesta</b>, con el texto y la referencia de la fuente.</li>
+              </ol>
+            </div>
+          </div>
+          <p class="home-foot">Uso personal y no comercial. Sin publicidad. Puedes eliminar tu cuenta y todos tus datos en cualquier momento desde el menú de tu usuario. Al finalizar la OPE se borrarán todos los datos.</p>
+        </div>
+      </section>
+
       <div class="aside-q" id="asideQuestions">
         <div class="aside-head">
           <div class="tabs">
@@ -447,42 +472,6 @@ body[data-app="preguntas"] .mainmenu,body[data-app="preguntas"] #pageHome{displa
           <button class="btn" id="shuffleBtn" style="padding:5px 9px;font-size:11.5px">Aleatorio</button>
         </div>
       </div>
-    </aside>
-    <div class="nav-backdrop" id="navBackdrop" hidden></div>
-
-    <main>
-      <nav class="breadcrumbs" id="crumbs" aria-label="Migas de pan"></nav>
-
-      <section id="pageHome" hidden>
-        <div class="home card">
-          <span class="home-kicker">OPE Osakidetza</span>
-          <h2>Practica tipo test para la oposición de Osakidetza</h2>
-          <p class="home-lead">epeosaki es una herramienta de práctica con preguntas tipo test, casos clínicos y la referencia exacta de la bibliografía donde está cada respuesta.</p>
-          <div class="home-cta">
-            <button class="btn primary" id="homeStart" type="button">Empezar a practicar</button>
-            <button class="btn" id="homeSignup" type="button">Crear cuenta</button>
-            <button class="btn" id="homeLogin" type="button">Iniciar sesión</button>
-          </div>
-          <div class="home-grid">
-            <div class="home-box">
-              <h3>Bloques disponibles</h3>
-              <ul class="home-list" id="homeBats"></ul>
-              <p>Al crear tu cuenta eliges qué bloques quieres trabajar. Puedes cambiarlos en cualquier momento desde <b>Mis bloques</b>, en el menú de tu usuario.</p>
-            </div>
-            <div class="home-box">
-              <h3>Cómo funciona</h3>
-              <ol class="home-list">
-                <li>Responde las preguntas. Cada intento se guarda y puedes revisarlo más tarde.</li>
-                <li>Confirma las respuestas correctas o indica si crees que no lo son. Así ayudas a revisar la base de preguntas.</li>
-                <li>Consulta <b>Preguntas más falladas</b> para ver qué preguntas fallan más los opositores.</li>
-                <li>Tras responder, verás <b>Dónde está la respuesta</b>, con el texto y la referencia de la fuente.</li>
-              </ol>
-            </div>
-          </div>
-          <p class="home-foot">Uso personal y no comercial. Sin publicidad. Puedes eliminar tu cuenta y todos tus datos en cualquier momento desde el menú de tu usuario. Al finalizar la OPE se borrarán todos los datos.</p>
-        </div>
-      </section>
-
       <section id="pageQuestions">
         <div class="ai-banner">&#9888; <b>Respuestas generadas con IA.</b> No son oficiales: verifícalas siempre con la bibliografía antes de darlas por válidas.</div>
         <div class="card" id="card">

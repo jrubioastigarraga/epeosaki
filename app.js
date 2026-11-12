@@ -828,8 +828,6 @@
     if (!box) return;
     const adminItem = $('#adminMenuItem');
     if (adminItem) adminItem.hidden = !canAdmin();
-    const adminTop = $('#adminTopLink');
-    if (adminTop) adminTop.hidden = !canAdmin();
     if (!HAS_CONFIG) {
       box.innerHTML = '<button class="btn" id="authBtn" type="button" title="Configura Supabase para activar el registro y las confirmaciones">Iniciar sesión</button>';
       $('#authBtn').onclick = () => openAuth();
