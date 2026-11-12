@@ -2,8 +2,6 @@
   'use strict';
 
   // Datos embebidos: se usan como respaldo si Supabase no está disponible.
-  const APP = document.body.dataset.app || 'inicio';
-  const appFor = (p) => (p === 'preguntas' ? 'preguntas' : 'inicio');
   const datasetEl = document.getElementById('dataset');
   const EMBEDDED = datasetEl ? JSON.parse(datasetEl.textContent || '{}') : {};
   let RAW = EMBEDDED;
@@ -1575,13 +1573,9 @@
       opts.skipHash = false;
       toast('El panel de administración solo está disponible para administradores.', 'err');
     }
-    if (appFor(page) !== APP) {
-      const file = page === 'preguntas' ? 'preguntas.html' : 'index.html';
-      location.href = file + (page === 'preguntas' || page === 'inicio' ? '' : '#/' + page);
-      return;
-    }
     state.page = page;
     const onQuestions = page === 'preguntas';
+    document.body.classList.toggle('page-preguntas', onQuestions);
     $('#pageHome').hidden = page !== 'inicio';
     $('#pageQuestions').hidden = !onQuestions;
     $('#pageBib').hidden = page !== 'bibliografia';
@@ -1958,7 +1952,6 @@
   function goToStatQuestion(uid) {
     const q = questions[uid];
     if (!q) return;
-    if (APP !== 'preguntas') { location.href = 'preguntas.html#' + uid; return; }
     state.reviewGroupId = null;
     setPage('preguntas', { skipHash: true, render: false });
     if (q.bat !== state.bat) {
@@ -2161,8 +2154,11 @@
   // ============================================================
   function routeFromHash() {
     const h = (() => { try { return decodeURIComponent(location.hash.replace('#', '')); } catch (e) { return ''; } })();
-    if (APP === 'inicio' && questions[h]) { location.href = 'preguntas.html#' + h; return; }
     const page = h.startsWith('/') ? h.slice(1) : '';
+    if (!page || page === 'inicio') {
+      if (state.page !== 'inicio') setPage('inicio', { skipHash: true, render: true });
+      return;
+    }
     if (PAGES.includes(page) && page !== 'preguntas') {
       setPage(page, { skipHash: true, render: true });
       return;
@@ -2180,12 +2176,10 @@
 
   const hash = (() => { try { return decodeURIComponent(location.hash.replace('#', '')); } catch (e) { return ''; } })();
   const hashPage = hash.startsWith('/') ? hash.slice(1) : '';
-  if (APP === 'inicio' && (questions[hash] || hash === '/preguntas')) { location.replace('preguntas.html' + location.hash); return; }
-  if (APP === 'preguntas' && hashPage && hashPage !== 'preguntas') { location.replace('index.html' + location.hash); return; }
   let startPage = 'preguntas';
   if (PAGES.includes(hashPage) && hashPage !== 'preguntas') {
     startPage = hashPage;
-  } else if (!hash && APP === 'inicio') {
+  } else if (!hash) {
     startPage = 'inicio';
     autoHome = true;
   } else if (questions[hash]) {
@@ -2193,6 +2187,7 @@
     state.bat = questions[hash].bat;
     if (questions[hash].caso != null) { state.view = 'case'; state.caseId = questions[hash].bat + ':' + questions[hash].caso; }
   }
+  document.body.classList.toggle('page-preguntas', startPage === 'preguntas');
   document.querySelectorAll('.tab[data-bat]').forEach(x => x.classList.toggle('on', x.dataset.bat === state.bat));
   $('#subtitle').textContent = BATS[state.bat].sub;
   renderAttemptSelect();

@@ -197,9 +197,8 @@ GitHub Pages sirve el contenido de la rama configurada (normalmente `main` / ra�
 ## 6. Estructura
 
 ```
-index.html              página de inicio (y lógica de la web)
+index.html              aplicación en una sola página con rutas internas (Inicio, Preguntas, Bibliografía, Ranking)
 i18n.js                  traducción al euskera de la interfaz (no traduce las preguntas ni la bibliografía); el botón "Euskara" de la cabecera cambia el idioma
-preguntas.html          página de preguntas (idéntica a index.html salvo data-app="preguntas"; cualquier cambio en la interfaz hay que copiarlo en ambos)
 app.js                  lógica de la aplicación (casos, usuarios, confirmaciones)
 config.js               URL y clave anon de Supabase
 favicon.svg             icono del sitio
