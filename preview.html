@@ -59,6 +59,15 @@ select{border:1px solid var(--line);background:#f8fafd;border-radius:8px;padding
 .review-btn{width:100%;margin-top:9px;padding:8px 10px;font-size:12.5px;background:var(--accent-soft);border-color:#c9d6f4;color:var(--accent)}
 .review-btn:hover{background:#dbe6ff;border-color:#a9bdf0}
 .kbd-hint{margin:12px 2px 0;font-size:11.5px;color:var(--muted)}
+.ai-banner{background:var(--warn-soft);color:#7a5000;border:1px solid #f0dfae;border-radius:10px;padding:9px 13px;font-size:12.5px;margin:0 0 12px;line-height:1.45}
+.ai-banner b{color:#6b4500}
+.correction-notice{background:var(--accent-soft);border:1px solid #c9d6f4;border-left:4px solid var(--accent);border-radius:10px;padding:11px 14px;margin:0 0 16px;font-size:12.5px;color:#33415c;line-height:1.55}
+.correction-notice b.title{display:block;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;font-size:10.5px;margin-bottom:4px}
+.correction-notice .row{margin:2px 0}
+.correction-notice .old{color:var(--bad)}
+.correction-notice .new{color:var(--ok)}
+.correction-notice .date{color:var(--muted);font-size:11.5px;margin-top:4px}
+.q-copy{margin-left:auto;flex:0 0 auto;padding:4px 9px;font-size:11px;white-space:nowrap}
 
 /* ---------- main ---------- */
 main{min-width:0}
@@ -397,6 +406,7 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
       <nav class="breadcrumbs" id="crumbs" aria-label="Migas de pan"></nav>
 
       <section id="pageQuestions">
+        <div class="ai-banner">&#9888; <b>Respuestas generadas con IA.</b> No son oficiales: verifícalas siempre con la bibliografía antes de darlas por válidas.</div>
         <div class="card" id="card">
           <div class="empty">Cargando⬦</div>
         </div>
@@ -486,6 +496,8 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
           <summary>Qué hace y qué guarda esta web</summary>
           <div class="terms-text">
             <p><b>Uso personal y no comercial.</b> Esta web es una herramienta de práctica para la OPE de Osakidetza. No tiene publicidad, no vende datos ni los comparte con terceros con fines comerciales.</p>
+            <p><b>Respuestas generadas con IA.</b> Las respuestas han sido elaboradas con inteligencia artificial y no son una plantilla oficial. El usuario final debe verificarlas siempre con la bibliografía y la normativa vigente antes de darlas por válidas.</p>
+            <p><b>Correcciones colaborativas.</b> Si 5 o más usuarios discrepan de una respuesta e indican otra opción como correcta, la respuesta podrá revisarse y modificarse. Los cambios también pueden aplicarlos un administrador desde el panel de administración, y quedan registrados con la respuesta anterior, la nueva y la fecha.</p>
             <p><b>Qué guarda si no inicias sesión:</b> solo en el almacenamiento local de tu navegador (localStorage) tus respuestas, intentos y preferencias. Esa información no se envía a ningún servidor y puedes borrarla borrando los datos del sitio en tu navegador.</p>
             <p><b>Qué guarda si creas una cuenta:</b></p>
             <ul>
@@ -516,6 +528,7 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
     <div class="modal-body">
       <div class="dispute-q" id="disputeQ"></div>
       <div class="dispute-opts" id="disputeOpts"></div>
+      <div class="ai-banner" style="font-size:11.5px;margin:0 0 12px">Si 5 o más usuarios discrepan de esta respuesta e indican la misma opción correcta, se revisará y podrá modificarse. El cambio quedará registrado con la respuesta anterior, la nueva y la fecha.</div>
       <div class="auth-form">
         <label>Comentario (opcional)
           <textarea id="disputeComment" rows="3" maxlength="1000" placeholder="Explica brevemente por qué crees que la respuesta es incorrecta…"></textarea>
@@ -858,8 +871,8 @@ window.OPE_CONFIG = {
         ta.remove();
       } catch (e) { copied = false; }
     }
-    if (copied) toast('Enunciado copiado', 'ok');
-    else toast('No se pudo copiar el enunciado', 'err');
+    if (copied) toast('Copiado al portapapeles', 'ok');
+    else toast('No se pudo copiar el texto', 'err');
   }
 
   function authError(err) {
@@ -1680,6 +1693,33 @@ window.OPE_CONFIG = {
     </div>`;
   }
 
+  function questionCopyText(q) {
+    const lines = [];
+    lines.push('Pregunta ' + q.numero + (q.tema ? ' · ' + q.tema : ''));
+    if (q.caso != null) lines.push('Caso clínico ' + q.caso);
+    if (q.contexto) { lines.push(''); lines.push(String(q.contexto).trim()); }
+    lines.push('');
+    lines.push(String(q.pregunta || '').trim());
+    lines.push('');
+    for (const [k, v] of Object.entries(q.opciones || {})) lines.push(k + ') ' + v);
+    return lines.join('\n');
+  }
+
+  function correctionNotice(q) {
+    const o = overrides[q.uid];
+    if (!o) return '';
+    const oldK = o.previous_answer;
+    const newK = o.answer;
+    const oldTxt = oldK && q.opciones ? q.opciones[oldK] : null;
+    const newTxt = newK && q.opciones ? q.opciones[newK] : null;
+    return `<div class="correction-notice">
+      <b class="title">Respuesta modificada</b>
+      <div class="row old">Antes: <b>${oldK ? esc(oldK) + ')' : '—'}</b> ${oldTxt ? esc(oldTxt) : ''}</div>
+      <div class="row new">Ahora: <b>${newK ? esc(newK) + ')' : '—'}</b> ${newTxt ? esc(newTxt) : ''}</div>
+      ${o.updated_at ? `<div class="date">Fecha del cambio: ${esc(fmtDate(o.updated_at))}</div>` : ''}
+    </div>`;
+  }
+
   function questionHtml(q, opts) {
     opts = opts || {};
     const a = viewAnswers()[q.uid];
@@ -1689,11 +1729,12 @@ window.OPE_CONFIG = {
       <span class="num">Pregunta ${q.numero}</span>
       ${opts.caseView ? '' : `<span class="tag">${esc(topicOf(q))}</span>`}
       ${confirmBadges(q)}
-      ${overrides[q.uid] ? '<span class="tag conf-me" title="La respuesta correcta fue corregida por un administrador">Respuesta corregida</span>' : ''}
       ${review && !a
         ? '<span class="tag conf-none">No respondida en este intento</span>'
         : (a ? confidenceBadge(q.confidence || 0) : '<span class="tag">Respuesta deducida · no oficial</span>')}
-    </div>`;
+      <button class="btn q-copy" type="button" data-copy-question="${q.uid}" title="Copiar la pregunta y sus opciones">Copiar</button>
+    </div>
+    ${correctionNotice(q)}`;
 
     if (q.contexto && !opts.caseView) {
       html += `<div class="case">
@@ -1806,6 +1847,12 @@ window.OPE_CONFIG = {
         const box = b.closest('.case');
         const txt = box ? box.querySelector('.txt') : null;
         copyText(txt ? (txt.innerText || txt.textContent || '') : '');
+      };
+    });
+    card.querySelectorAll('[data-copy-question]').forEach(b => {
+      b.onclick = () => {
+        const q = questions[b.dataset.copyQuestion];
+        if (q) copyText(questionCopyText(q));
       };
     });
     const prev = $('#prevBtn'), next = $('#nextBtn');

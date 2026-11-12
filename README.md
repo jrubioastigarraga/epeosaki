@@ -196,6 +196,8 @@ bibliografia/           leyes, guías y manuales (lectores + PDF)
 
 La web es una herramienta de **uso personal y no comercial** para preparar la OPE de Osakidetza. No tiene publicidad ni vende o comparte datos con terceros con fines comerciales.
 
+- **Respuestas generadas con IA:** las respuestas han sido elaboradas con inteligencia artificial y no son una plantilla oficial. El usuario final debe verificarlas con la bibliografía y la normativa vigente antes de darlas por válidas.
+- **Correcciones:** si 5 o más usuarios discrepan de una respuesta e indican la misma opción correcta, la respuesta podrá revisarse y modificarse. Un administrador también puede corregirla desde el panel de administración. Cada cambio guarda la respuesta anterior, la nueva y la fecha, y se muestra en la pregunta afectada.
 - **Sin cuenta:** las respuestas, intentos y preferencias se guardan solo en `localStorage`, en el navegador. No se envían a ningún servidor.
 - **Con cuenta:** se guardan en Supabase el email, el nombre visible, la contraseña cifrada (la web nunca la almacena en claro), la fecha de alta, los intentos y respuestas, y las confirmaciones o correcciones con su comentario y fecha. La aceptación de estas condiciones queda registrada en los metadatos de la cuenta.
 - **Ranking:** solo se publican datos agregados de fallos; no se muestra qué usuario falló cada pregunta.
@@ -206,6 +208,6 @@ La web es una herramienta de **uso personal y no comercial** para preparar la OP
 
 ## 8. Notas
 
-- Las respuestas del dataset son deducidas y no son una plantilla oficial. El campo `confidence` muestra la seguridad con la que se propuso cada respuesta; las confirmaciones de usuarios son independientes de ese valor.
+- Las respuestas del dataset han sido generadas con IA y no son una plantilla oficial; el usuario final debe verificarlas con la bibliografía. El campo `confidence` muestra la seguridad con la que se propuso cada respuesta; las confirmaciones de usuarios son independientes de ese valor.
 - La agrupación de casos clínicos usa el campo `caso` del dataset y muestra solo el enunciado del caso, sin repetir dentro las preguntas y opciones.
 - Para cambiar el número de confirmaciones que se muestran en el tooltip, ajusta `[1:5]` en la función `question_confirmation_stats()` de `sql/schema.sql`.

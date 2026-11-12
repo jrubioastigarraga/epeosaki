@@ -292,8 +292,8 @@
         ta.remove();
       } catch (e) { copied = false; }
     }
-    if (copied) toast('Enunciado copiado', 'ok');
-    else toast('No se pudo copiar el enunciado', 'err');
+    if (copied) toast('Copiado al portapapeles', 'ok');
+    else toast('No se pudo copiar el texto', 'err');
   }
 
   function authError(err) {
@@ -1114,6 +1114,33 @@
     </div>`;
   }
 
+  function questionCopyText(q) {
+    const lines = [];
+    lines.push('Pregunta ' + q.numero + (q.tema ? ' · ' + q.tema : ''));
+    if (q.caso != null) lines.push('Caso clínico ' + q.caso);
+    if (q.contexto) { lines.push(''); lines.push(String(q.contexto).trim()); }
+    lines.push('');
+    lines.push(String(q.pregunta || '').trim());
+    lines.push('');
+    for (const [k, v] of Object.entries(q.opciones || {})) lines.push(k + ') ' + v);
+    return lines.join('\n');
+  }
+
+  function correctionNotice(q) {
+    const o = overrides[q.uid];
+    if (!o) return '';
+    const oldK = o.previous_answer;
+    const newK = o.answer;
+    const oldTxt = oldK && q.opciones ? q.opciones[oldK] : null;
+    const newTxt = newK && q.opciones ? q.opciones[newK] : null;
+    return `<div class="correction-notice">
+      <b class="title">Respuesta modificada</b>
+      <div class="row old">Antes: <b>${oldK ? esc(oldK) + ')' : '—'}</b> ${oldTxt ? esc(oldTxt) : ''}</div>
+      <div class="row new">Ahora: <b>${newK ? esc(newK) + ')' : '—'}</b> ${newTxt ? esc(newTxt) : ''}</div>
+      ${o.updated_at ? `<div class="date">Fecha del cambio: ${esc(fmtDate(o.updated_at))}</div>` : ''}
+    </div>`;
+  }
+
   function questionHtml(q, opts) {
     opts = opts || {};
     const a = viewAnswers()[q.uid];
@@ -1123,11 +1150,12 @@
       <span class="num">Pregunta ${q.numero}</span>
       ${opts.caseView ? '' : `<span class="tag">${esc(topicOf(q))}</span>`}
       ${confirmBadges(q)}
-      ${overrides[q.uid] ? '<span class="tag conf-me" title="La respuesta correcta fue corregida por un administrador">Respuesta corregida</span>' : ''}
       ${review && !a
         ? '<span class="tag conf-none">No respondida en este intento</span>'
         : (a ? confidenceBadge(q.confidence || 0) : '<span class="tag">Respuesta deducida · no oficial</span>')}
-    </div>`;
+      <button class="btn q-copy" type="button" data-copy-question="${q.uid}" title="Copiar la pregunta y sus opciones">Copiar</button>
+    </div>
+    ${correctionNotice(q)}`;
 
     if (q.contexto && !opts.caseView) {
       html += `<div class="case">
@@ -1240,6 +1268,12 @@
         const box = b.closest('.case');
         const txt = box ? box.querySelector('.txt') : null;
         copyText(txt ? (txt.innerText || txt.textContent || '') : '');
+      };
+    });
+    card.querySelectorAll('[data-copy-question]').forEach(b => {
+      b.onclick = () => {
+        const q = questions[b.dataset.copyQuestion];
+        if (q) copyText(questionCopyText(q));
       };
     });
     const prev = $('#prevBtn'), next = $('#nextBtn');
