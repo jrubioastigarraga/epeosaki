@@ -327,7 +327,67 @@ revoke all on function public.question_failure_stats() from public;
 grant execute on function public.question_failure_stats() to anon, authenticated;
 
 -- ---------------------------------------------------------------------
--- 4. Crear el primer administrador
+-- 4. Correcciones de la respuesta correcta (solo administradores)
+-- ---------------------------------------------------------------------
+create table if not exists public.question_overrides (
+  question_uid     text primary key check (question_uid ~ '^(comun|fem)-[0-9]{1,3}$'),
+  answer           text not null check (answer in ('a', 'b', 'c', 'd')),
+  previous_answer  text check (previous_answer is null or previous_answer in ('a', 'b', 'c', 'd')),
+  updated_by       uuid references public.profiles (id) on delete set null,
+  updated_at       timestamptz not null default now()
+);
+
+alter table public.question_overrides enable row level security;
+
+drop policy if exists "question_overrides_select_all" on public.question_overrides;
+create policy "question_overrides_select_all"
+  on public.question_overrides for select
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "question_overrides_insert_admin" on public.question_overrides;
+create policy "question_overrides_insert_admin"
+  on public.question_overrides for insert
+  to authenticated
+  with check (public.is_admin());
+
+drop policy if exists "question_overrides_update_admin" on public.question_overrides;
+create policy "question_overrides_update_admin"
+  on public.question_overrides for update
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists "question_overrides_delete_admin" on public.question_overrides;
+create policy "question_overrides_delete_admin"
+  on public.question_overrides for delete
+  to authenticated
+  using (public.is_admin());
+
+grant select on public.question_overrides to anon, authenticated;
+grant insert, update, delete on public.question_overrides to authenticated;
+
+create or replace function public.apply_question_override()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.attempts
+     set is_correct = (pick = new.answer)
+   where question_uid = new.question_uid;
+  return new;
+end;
+$$;
+
+drop trigger if exists question_overrides_apply on public.question_overrides;
+create trigger question_overrides_apply
+  after insert or update of answer on public.question_overrides
+  for each row execute function public.apply_question_override();
+
+-- ---------------------------------------------------------------------
+-- 5. Crear el primer administrador
 -- ---------------------------------------------------------------------
 -- 1) Registra la cuenta desde la web (botón "Iniciar sesión" > "Crear cuenta").
 -- 2) Ejecuta esto cambiando el email:

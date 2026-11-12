@@ -13,7 +13,7 @@ Además, la aplicación se conecta a **Supabase** para tener:
 - **Confirmación de respuestas** por parte de los usuarios (y aviso de discrepancias).
 - **Intentos agrupados**: cada intento guarda las preguntas que hayas respondido, aunque no completes todas. Puedes revisar cualquier intento pasado desde el selector de la barra lateral.
 - **Ranking de preguntas más falladas**: global (todos los usuarios) o solo tus fallos.
-- Panel de administración para gestionar roles y revisar/eliminar confirmaciones.
+- Panel de administración en el menú lateral para gestionar roles, revisar/eliminar confirmaciones y corregir la respuesta correcta desde las discrepancias.
 - Sincronización del progreso entre dispositivos (si se inicia sesión).
 
 ---
@@ -35,11 +35,14 @@ Además, la aplicación se conecta a **Supabase** para tener:
    - `confirmations`: confirmaciones y discrepancias de respuestas.
    - `attempt_groups`: cada intento (puede quedar incompleto).
    - `attempts`: respuestas de cada intento.
+   - `question_overrides`: respuestas correctas corregidas por administradores.
    - funciones `is_admin()`, `question_confirmation_stats()`, `question_failure_stats()`, triggers y políticas RLS.
 
 > En este repositorio ya está ejecutado sobre el proyecto `ope_ana` (`idydmepueznvspefottp`).
 
 > Si actualizas desde la versión anterior (una sola fila por pregunta en `attempts`), ejecuta también [`sql/migrate_attempt_groups.sql`](sql/migrate_attempt_groups.sql). En `ope_ana` ya está aplicada.
+
+> Para activar las correcciones de respuesta del administrador, ejecuta también [`sql/migrate_question_overrides.sql`](sql/migrate_question_overrides.sql). Es necesario para que el botón **Aplicar** de las discrepancias pueda guardar el cambio.
 
 ### 1.3 Copiar las claves
 
@@ -82,13 +85,14 @@ update public.profiles
  where email = 'tu-email@ejemplo.com';
 ```
 
-3. Cierra sesión y vuelve a entrar. Aparecerá el **Panel de administración** en el menú del usuario.
+3. Cierra sesión y vuelve a entrar. Aparecerá **Administración** en el menú lateral (y también en el menú del usuario).
 
 Desde ese panel puedes:
 
 - Convertir a cualquier usuario en administrador (o devolverlo a usuario normal).
 - Ver todas las confirmaciones y discrepancias, con el usuario, la opción propuesta y el comentario.
 - Eliminar confirmaciones.
+- **Cambiar la respuesta correcta** de una pregunta desde una discrepancia: elige la opción en la columna **Corregir** y pulsa **Aplicar**. El cambio se guarda para todos los usuarios y recalcula los intentos ya registrados.
 
 ---
 
@@ -115,7 +119,7 @@ Marcar **No es correcta** **no cambia la respuesta automáticamente**. Se guarda
 - Un comentario opcional.
 - El usuario y la fecha.
 
-El administrador las revisa en **Panel de administración → Confirmaciones → Discrepancias**. Ahí aparecen la respuesta actual, la opción propuesta, el comentario y un botón **Ver pregunta**. Las discrepancias no modifican el dataset por sí solas; si la corrección es válida, hay que actualizar la respuesta en los datos.
+El administrador las revisa en **Administración → Confirmaciones → Discrepancias**. Ahí aparecen la respuesta actual, la opción propuesta, el comentario y un botón **Ver pregunta**. Desde la columna **Corregir** puede elegir la nueva respuesta correcta y pulsar **Aplicar**; el cambio se guarda en `question_overrides`, se aplica a todos los usuarios y recalcula automáticamente los intentos ya registrados.
 
 El progreso (preguntas respondidas) se guarda en `localStorage` y, si hay sesión, también en Supabase. Al iniciar sesión se combinan ambos y se sincronizan.
 
@@ -182,6 +186,7 @@ favicon.svg             icono del sitio
 vendor/supabase.js      cliente oficial de Supabase (UMD, servido en local)
 sql/schema.sql          tablas, funciones, triggers y políticas RLS
 sql/migrate_attempt_groups.sql  migración de progreso antiguo a intentos
+sql/migrate_question_overrides.sql  tabla para corregir respuestas (administradores)
 bibliografia/           leyes, guías y manuales (lectores + PDF)
 ```
 

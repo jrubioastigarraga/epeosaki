@@ -249,6 +249,7 @@
   let profile = null;
   let confirmStats = {};   // question_uid -> { confirms, disputes, confirmers, last_at }
   let myConf = {};         // question_uid -> fila de confirmación del usuario
+  let overrides = {};      // question_uid -> { answer, previous_answer }
   let authMode = 'login';
   let disputeUid = null;
   let adminTab = 'users';
@@ -312,12 +313,13 @@
   };
 
   async function initSupabase() {
-    if (!HAS_CONFIG) { showSetupBanner('local'); return; }
-    if (!window.supabase) { showSetupBanner('cdn'); return; }
+    if (!HAS_CONFIG) { if (location.hash === '#/admin') setPage('preguntas'); showSetupBanner('local'); return; }
+    if (!window.supabase) { if (location.hash === '#/admin') setPage('preguntas'); showSetupBanner('cdn'); return; }
     try {
       SB = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, {
         auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
       });
+      await loadQuestionOverrides();
       const { data } = await SB.auth.getSession();
       await setSession(data.session || null);
       SB.auth.onAuthStateChange((event, sess) => {
@@ -345,11 +347,13 @@
       await loadConfirmationStats();
       renderAuthUI();
       renderAll(false);
+      if (location.hash === '#/admin') routeFromHash();
       return;
     }
     await Promise.all([loadProfile(), loadConfirmationStats(), loadMyConfirmations(), syncAttempts()]);
     renderAuthUI();
     renderAll(false);
+    if (location.hash === '#/admin') routeFromHash();
   }
 
   async function loadProfile() {
@@ -395,6 +399,76 @@
       for (const r of data || []) map[r.question_uid] = r;
       myConf = map;
     } catch (e) { console.warn('[mis confirmaciones]', e); }
+  }
+
+  // ------------------------------------------------------------
+  //  Correcciones de la respuesta correcta (administración)
+  // ------------------------------------------------------------
+  async function loadQuestionOverrides() {
+    if (!SB) return;
+    try {
+      const { data, error } = await SB.from('question_overrides')
+        .select('question_uid,answer,previous_answer,updated_at');
+      if (error) { console.warn('[correcciones]', error.message); return; }
+      const map = {};
+      for (const r of data || []) map[r.question_uid] = r;
+      overrides = map;
+      applyQuestionOverrides();
+    } catch (e) { console.warn('[correcciones]', e); }
+  }
+
+  function applyQuestionOverrides() {
+    let changed = false;
+    for (const [uid, o] of Object.entries(overrides)) {
+      const q = questions[uid];
+      if (!q || !o || !o.answer) continue;
+      q.answer = o.answer;
+    }
+    // Recalcular el resultado local de las respuestas ya guardadas.
+    for (const g of store.groups) {
+      for (const [uid, a] of Object.entries(g.answers || {})) {
+        const q = questions[uid];
+        if (!q) continue;
+        const ok = a.pick === q.answer;
+        if (ok !== a.ok) { a.ok = ok; changed = true; }
+      }
+    }
+    if (changed) save();
+  }
+
+  function canAdmin() {
+    return !!(session && profile && profile.role === 'admin');
+  }
+
+  async function applyAnswerCorrection(uid, newAnswer) {
+    const q = questions[uid];
+    if (!q || !canAdmin() || !SB) return;
+    if (!newAnswer || !q.opciones[newAnswer]) return;
+    if (newAnswer === q.answer) {
+      toast('Esa ya es la respuesta correcta.', 'ok');
+      return;
+    }
+    const oldAnswer = q.answer;
+    const label = String(newAnswer) + ') ' + String(q.opciones[newAnswer] || '').slice(0, 90);
+    if (!confirm('¿Cambiar la respuesta correcta de la pregunta ' + q.numero + ' a «' + label + '»?\n\nEl cambio se aplica a todos los usuarios y recalcula sus intentos.')) return;
+    const now = new Date().toISOString();
+    const { error } = await SB.from('question_overrides').upsert({
+      question_uid: uid,
+      answer: newAnswer,
+      previous_answer: oldAnswer,
+      updated_by: session.user.id,
+      updated_at: now
+    }, { onConflict: 'question_uid' });
+    if (error) {
+      toast('No se pudo guardar la corrección: ' + error.message + '. ¿Has ejecutado sql/migrate_question_overrides.sql?', 'err');
+      return;
+    }
+    overrides[uid] = { question_uid: uid, answer: newAnswer, previous_answer: oldAnswer, updated_at: now };
+    q.answer = newAnswer;
+    applyQuestionOverrides();
+    toast('Respuesta correcta actualizada y guardada.', 'ok');
+    renderAll(true);
+    renderAdmin();
   }
 
   async function syncAttempts() {
@@ -625,6 +699,8 @@
   function renderAuthUI() {
     const box = $('#authBox');
     if (!box) return;
+    const adminItem = $('#adminMenuItem');
+    if (adminItem) adminItem.hidden = !canAdmin();
     if (!HAS_CONFIG) {
       box.innerHTML = '<button class="btn" id="authBtn" type="button" title="Configura Supabase para activar el registro y las confirmaciones">Iniciar sesión</button>';
       $('#authBtn').onclick = () => openAuth();
@@ -646,7 +722,7 @@
           <button type="button" id="logoutBtn">Cerrar sesión</button>
         </div>`;
       $('#userChip').onclick = (e) => { e.stopPropagation(); const m = $('#userMenu'); m.hidden = !m.hidden; };
-      if (isAdmin) $('#adminBtn').onclick = () => { $('#userMenu').hidden = true; openAdmin(); };
+      if (isAdmin) $('#adminBtn').onclick = () => { $('#userMenu').hidden = true; setPage('admin', { push: true }); };
       $('#logoutBtn').onclick = async () => {
         $('#userMenu').hidden = true;
         if (SB) await SB.auth.signOut();
@@ -656,6 +732,7 @@
         store.active = { comun: null, fem: null };
         store.owner = null;
         state.reviewGroupId = null;
+        if (state.page === 'admin') setPage('preguntas', { render: false });
         save();
         renderAuthUI();
         renderAttemptSelect();
@@ -1046,6 +1123,7 @@
       <span class="num">Pregunta ${q.numero}</span>
       ${opts.caseView ? '' : `<span class="tag">${esc(topicOf(q))}</span>`}
       ${confirmBadges(q)}
+      ${overrides[q.uid] ? '<span class="tag conf-me" title="La respuesta correcta fue corregida por un administrador">Respuesta corregida</span>' : ''}
       ${review && !a
         ? '<span class="tag conf-none">No respondida en este intento</span>'
         : (a ? confidenceBadge(q.confidence || 0) : '<span class="tag">Respuesta deducida · no oficial</span>')}
@@ -1179,7 +1257,7 @@
   // ============================================================
   //  Páginas, menú lateral y migas de pan
   // ============================================================
-  const PAGES = ['preguntas', 'bibliografia', 'ranking'];
+  const PAGES = ['preguntas', 'bibliografia', 'ranking', 'admin'];
 
   function renderCrumbs() {
     const box = $('#crumbs');
@@ -1191,6 +1269,8 @@
       html += sep + '<span aria-current="page">Bibliografía</span>';
     } else if (state.page === 'ranking') {
       html += sep + '<span aria-current="page">Preguntas más falladas</span>';
+    } else if (state.page === 'admin') {
+      html += sep + '<span aria-current="page">Administración</span>';
     } else {
       let current = 'Preguntas';
       if (state.view === 'case') {
@@ -1211,11 +1291,17 @@
   function setPage(page, opts) {
     opts = opts || {};
     if (!PAGES.includes(page)) page = 'preguntas';
+    if (page === 'admin' && !canAdmin()) {
+      page = 'preguntas';
+      opts.skipHash = false;
+      toast('El panel de administración solo está disponible para administradores.', 'err');
+    }
     state.page = page;
     const onQuestions = page === 'preguntas';
     $('#pageQuestions').hidden = !onQuestions;
     $('#pageBib').hidden = page !== 'bibliografia';
     $('#pageRanking').hidden = page !== 'ranking';
+    $('#pageAdmin').hidden = page !== 'admin';
     $('#asideQuestions').hidden = !onQuestions;
     document.querySelectorAll('.mm-item').forEach(b => {
       const on = b.dataset.page === page;
@@ -1234,6 +1320,7 @@
     }
     if (page === 'bibliografia') renderBib($('#bibSearch').value || '');
     else if (page === 'ranking') openStats();
+    else if (page === 'admin') openAdmin();
     else if (opts.render !== false) renderAll(false);
   }
 
@@ -1338,11 +1425,10 @@
   //  Administración
   // ============================================================
   async function openAdmin() {
-    if (!session || !profile || profile.role !== 'admin') return;
+    if (!canAdmin()) return;
     adminTab = 'users';
     adminConfFilter = 'all';
     document.querySelectorAll('[data-admin]').forEach(t => t.classList.toggle('on', t.dataset.admin === 'users'));
-    $('#adminModal').classList.add('open');
     await renderAdmin();
   }
 
@@ -1411,14 +1497,25 @@
         const actualText = q && q.opciones ? q.opciones[actual] : '';
         const propText = q && r.suggested_answer && q.opciones ? q.opciones[r.suggested_answer] : '';
         const qText = q ? q.pregunta : r.question_uid;
+        const newAns = r.suggested_answer || actual || 'a';
+        const editor = (!r.is_correct && q)
+          ? `<div class="correct-editor">
+               <select data-new-answer="${r.question_uid}" aria-label="Nueva respuesta correcta">
+                 ${['a', 'b', 'c', 'd'].map(k => `<option value="${k}"${k === newAns ? ' selected' : ''}>${k}) ${esc(String(q.opciones[k] || '').slice(0, 55))}</option>`).join('')}
+               </select>
+               <button class="btn primary" type="button" data-apply-answer="${r.question_uid}">Aplicar</button>
+             </div>`
+          : '—';
+        const corrected = overrides[r.question_uid] ? ' <span class="pill">corregida</span>' : '';
         return `<tr>
           <td><div class="admin-name">${q ? 'Pregunta ' + q.numero : esc(r.question_uid)}</div><div class="admin-sub">${esc(qText.slice(0, 90))}${qText.length > 90 ? '…' : ''}</div></td>
           <td>${esc(who || '—')}</td>
           <td>${r.is_correct ? '<span class="tag conf-ok">Confirma</span>' : '<span class="tag conf-bad">Discrepa</span>'}</td>
-          <td>${actual ? `<b>${esc(actual)})</b> ${esc(actualText || '')}` : '—'}</td>
+          <td>${actual ? `<b>${esc(actual)})</b> ${esc(actualText || '')}${corrected}` : '—'}</td>
           <td>${r.suggested_answer ? `<b>${esc(r.suggested_answer)})</b> ${esc(propText || '')}` : '—'}</td>
           <td class="admin-comment">${esc(r.comment || '')}</td>
           <td>${fmtDate(r.created_at)}</td>
+          <td>${editor}</td>
           <td><div class="admin-actions">
             <button class="btn" type="button" data-open-q="${r.question_uid}">Ver pregunta</button>
             <button class="btn" type="button" data-delconf="${r.id}">Eliminar</button>
@@ -1430,15 +1527,15 @@
         : adminConfFilter === 'confirms'
           ? 'No hay confirmaciones'
           : 'Sin confirmaciones todavía';
-      body.innerHTML = `<div class="stats-note">Las discrepancias no cambian la respuesta automáticamente: quedan aquí para que revises la respuesta actual, la opción propuesta y el comentario.</div>
+      body.innerHTML = `<div class="stats-note">Las discrepancias no cambian la respuesta automáticamente. Revisa la respuesta actual, la opción propuesta y el comentario; si procede, elige la respuesta correcta en <b>Corregir</b> y pulsa <b>Aplicar</b>. El cambio se guarda para todos los usuarios.</div>
         <div class="admin-filter">
           <button class="tab${adminConfFilter === 'all' ? ' on' : ''}" type="button" data-conf-filter="all">Todas (${data.length})</button>
           <button class="tab${adminConfFilter === 'disputes' ? ' on' : ''}" type="button" data-conf-filter="disputes">Discrepancias (${disc})</button>
           <button class="tab${adminConfFilter === 'confirms' ? ' on' : ''}" type="button" data-conf-filter="confirms">Confirmaciones (${confs})</button>
         </div>
         <div class="table-wrap"><table class="admin">
-        <thead><tr><th>Pregunta</th><th>Usuario</th><th>Tipo</th><th>Respuesta actual</th><th>Opción propuesta</th><th>Comentario</th><th>Fecha</th><th></th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="8" class="empty-row">${emptyMsg}</td></tr>`}</tbody>
+        <thead><tr><th>Pregunta</th><th>Usuario</th><th>Tipo</th><th>Respuesta actual</th><th>Opción propuesta</th><th>Comentario</th><th>Fecha</th><th>Corregir</th><th></th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="9" class="empty-row">${emptyMsg}</td></tr>`}</tbody>
       </table></div>`;
       body.querySelectorAll('[data-conf-filter]').forEach(b => {
         b.onclick = () => {
@@ -1448,8 +1545,14 @@
       });
       body.querySelectorAll('[data-open-q]').forEach(b => {
         b.onclick = () => {
-          $('#adminModal').classList.remove('open');
           goToStatQuestion(b.dataset.openQ);
+        };
+      });
+      body.querySelectorAll('[data-apply-answer]').forEach(b => {
+        b.onclick = () => {
+          const uid = b.dataset.applyAnswer;
+          const sel = body.querySelector('select[data-new-answer="' + uid + '"]');
+          applyAnswerCorrection(uid, sel ? sel.value : null);
         };
       });
       body.querySelectorAll('[data-delconf]').forEach(b => {
@@ -1679,9 +1782,7 @@
   $('#disputeSubmit').onclick = submitDispute;
   $('#disputeModal').onclick = (e) => { if (e.target.id === 'disputeModal') $('#disputeModal').classList.remove('open'); };
 
-  // Administración
-  $('#adminClose').onclick = () => $('#adminModal').classList.remove('open');
-  $('#adminModal').onclick = (e) => { if (e.target.id === 'adminModal') $('#adminModal').classList.remove('open'); };
+  // Administración (página normal dentro de la app)
   document.querySelectorAll('[data-admin]').forEach(t => {
     t.onclick = () => {
       adminTab = t.dataset.admin;
@@ -1712,7 +1813,7 @@
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
-      ['#authModal', '#disputeModal', '#adminModal'].forEach(s => {
+      ['#authModal', '#disputeModal'].forEach(s => {
         const n = $(s); if (n) n.classList.remove('open');
       });
       closeSidebar();
@@ -1735,8 +1836,9 @@
   // ============================================================
   function routeFromHash() {
     const h = (() => { try { return decodeURIComponent(location.hash.replace('#', '')); } catch (e) { return ''; } })();
-    if (h === '/bibliografia' || h === '/ranking') {
-      setPage(h.slice(1), { skipHash: true, render: true });
+    const page = h.startsWith('/') ? h.slice(1) : '';
+    if (PAGES.includes(page) && page !== 'preguntas') {
+      setPage(page, { skipHash: true, render: true });
       return;
     }
     if (questions[h]) {
@@ -1752,8 +1854,9 @@
 
   const hash = (() => { try { return decodeURIComponent(location.hash.replace('#', '')); } catch (e) { return ''; } })();
   let startPage = 'preguntas';
-  if (hash === '/bibliografia' || hash === '/ranking') {
-    startPage = hash.slice(1);
+  const hashPage = hash.startsWith('/') ? hash.slice(1) : '';
+  if (PAGES.includes(hashPage) && hashPage !== 'preguntas') {
+    startPage = hashPage;
   } else if (questions[hash]) {
     state.uid = hash;
     state.bat = questions[hash].bat;
@@ -1764,7 +1867,7 @@
   renderTopics();
   renderAttemptSelect();
   renderAll(false);
-  if (startPage !== 'preguntas') setPage(startPage, { skipHash: true, render: true });
+  if (startPage !== 'preguntas' && startPage !== 'admin') setPage(startPage, { skipHash: true, render: true });
   renderAuthUI();
   initSupabase();
 })();

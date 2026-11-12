@@ -294,6 +294,9 @@ kbd{background:#eef2f8;border:1px solid #d9e1ee;border-bottom-width:2px;border-r
 .admin-filter .tab{flex:0 0 auto;padding:6px 10px;font-size:11.5px}
 .admin-actions{display:flex;gap:5px;flex-wrap:wrap}
 .admin-actions .btn{padding:5px 8px;font-size:11px}
+.correct-editor{display:flex;gap:5px;align-items:center;flex-wrap:wrap;min-width:210px}
+.correct-editor select{max-width:230px;padding:5px 6px;font-size:11.5px}
+.correct-editor .btn{padding:5px 8px;font-size:11px;white-space:nowrap}
 .table-wrap{overflow:auto;max-height:64vh}
 table.admin{width:100%;border-collapse:collapse;font-size:12.5px}
 table.admin th,table.admin td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
@@ -346,6 +349,7 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
         <button class="mm-item on" type="button" data-page="preguntas" aria-current="page"><span class="mm-ic">&#9998;</span>Preguntas</button>
         <button class="mm-item" type="button" data-page="bibliografia"><span class="mm-ic">&#128218;</span>Bibliografía</button>
         <button class="mm-item" type="button" data-page="ranking"><span class="mm-ic">&#9888;</span>Preguntas más falladas</button>
+        <button class="mm-item" type="button" data-page="admin" id="adminMenuItem" hidden><span class="mm-ic">&#9881;</span>Administración</button>
       </nav>
       <div class="aside-q" id="asideQuestions">
         <div class="aside-head">
@@ -432,6 +436,22 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
         </div>
         <div id="statsBody"></div>
       </section>
+
+      <section id="pageAdmin" class="page-card card" hidden>
+        <div class="page-head">
+          <div>
+            <h2>Panel de administración</h2>
+            <p>Gestiona usuarios, confirmaciones y correcciones de respuestas.</p>
+          </div>
+          <div class="page-tools">
+            <div class="tabs" style="margin:0">
+              <button class="tab on" type="button" data-admin="users">Usuarios</button>
+              <button class="tab" type="button" data-admin="confs">Confirmaciones</button>
+            </div>
+          </div>
+        </div>
+        <div id="adminBody"></div>
+      </section>
     </main>
   </div>
 </div>
@@ -510,20 +530,7 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
   </div>
 </div>
 
-<!-- Panel de administración -->
-<div class="modal" id="adminModal">
-  <div class="modal-card" style="max-width:1050px">
-    <div class="modal-head">
-      <h3>Panel de administración</h3>
-      <div class="tabs" style="margin:0;flex:0 0 auto">
-        <button class="tab on" type="button" data-admin="users">Usuarios</button>
-        <button class="tab" type="button" data-admin="confs">Confirmaciones</button>
-      </div>
-      <button class="btn" id="adminClose" type="button">Cerrar</button>
-    </div>
-    <div class="modal-body" id="adminBody"></div>
-  </div>
-</div>
+<!-- Panel de administración: ahora es una página normal (ver #pageAdmin) -->
 
 <!-- Ranking de preguntas más falladas: ahora es una página normal (ver #pageRanking) -->
 
