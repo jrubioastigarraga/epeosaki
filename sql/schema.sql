@@ -9,6 +9,10 @@
 --    - confirmations   confirmaciones / discrepancias de respuestas
 --    - attempt_groups  cada intento (puede quedar incompleto)
 --    - attempts        respuestas de cada intento
+--    - question_overrides  correcciones de respuesta (administradores)
+--    - batteries       metadatos de cada batería
+--    - questions       preguntas, opciones y respuestas
+--    - bibliography    fuentes de la bibliografía
 --    - funciones y políticas RLS
 -- =====================================================================
 
@@ -387,7 +391,90 @@ create trigger question_overrides_apply
   for each row execute function public.apply_question_override();
 
 -- ---------------------------------------------------------------------
--- 5. Crear el primer administrador
+-- 5. Contenido de la web (baterías, preguntas y bibliografía)
+-- ---------------------------------------------------------------------
+create table if not exists public.batteries (
+  id          text primary key check (id in ('comun', 'fem', 'mi')),
+  meta        jsonb not null default '{}'::jsonb,
+  updated_at  timestamptz not null default now()
+);
+
+create table if not exists public.questions (
+  uid         text primary key check (uid ~ '^(comun|fem|mi)-[0-9]{1,3}$'),
+  battery     text not null references public.batteries (id) on delete cascade,
+  numero      integer not null,
+  contexto    text,
+  caso        integer,
+  pregunta    text not null,
+  opciones    jsonb not null,
+  answer      text check (answer is null or answer in ('a', 'b', 'c', 'd')),
+  confidence  integer,
+  source      jsonb,
+  tags        jsonb not null default '[]'::jsonb,
+  notas       text,
+  tema        text,
+  tema_id     text,
+  updated_at  timestamptz not null default now(),
+  unique (battery, numero)
+);
+
+create index if not exists questions_battery_idx on public.questions (battery, numero);
+
+create table if not exists public.bibliography (
+  id          text primary key,
+  grupo       text,
+  data        jsonb not null default '{}'::jsonb,
+  updated_at  timestamptz not null default now()
+);
+
+alter table public.batteries enable row level security;
+alter table public.questions enable row level security;
+alter table public.bibliography enable row level security;
+
+drop policy if exists "batteries_select_all" on public.batteries;
+create policy "batteries_select_all"
+  on public.batteries for select
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "batteries_write_admin" on public.batteries;
+create policy "batteries_write_admin"
+  on public.batteries for all
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists "questions_select_all" on public.questions;
+create policy "questions_select_all"
+  on public.questions for select
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "questions_write_admin" on public.questions;
+create policy "questions_write_admin"
+  on public.questions for all
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists "bibliography_select_all" on public.bibliography;
+create policy "bibliography_select_all"
+  on public.bibliography for select
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "bibliography_write_admin" on public.bibliography;
+create policy "bibliography_write_admin"
+  on public.bibliography for all
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+grant select on public.batteries, public.questions, public.bibliography to anon, authenticated;
+grant insert, update, delete on public.batteries, public.questions, public.bibliography to authenticated;
+
+-- ---------------------------------------------------------------------
+-- 6. Crear el primer administrador
 -- ---------------------------------------------------------------------
 -- 1) Registra la cuenta desde la web (botón "Iniciar sesión" > "Crear cuenta").
 -- 2) Ejecuta esto cambiando el email:

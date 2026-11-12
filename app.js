@@ -1,71 +1,66 @@
 (function () {
   'use strict';
 
-  // ============================================================
-  //  Datos embebidos
-  // ============================================================
-  const RAW = JSON.parse(document.getElementById('dataset').textContent);
-  const FUENTES = RAW.fuentes || [];
+  // Datos embebidos: se usan como respaldo si Supabase no está disponible.
+  const EMBEDDED = JSON.parse(document.getElementById('dataset').textContent);
+  let RAW = EMBEDDED;
+  let FUENTES = [];
+  let questions = {};
+  let cases = {};
+  let unitCache = {};
   const BATS = {
-    comun: { data: RAW.comun, label: 'Batería común', sub: 'Temario común · 200 preguntas' },
-    fem: { data: RAW.fem, label: 'INF Enfermedades Infecciosas', sub: 'Enfermedades Infecciosas · 500 preguntas' },
-    mi: { data: RAW.mi, label: 'Medicina Interna', sub: 'Medicina Interna · 500 preguntas' }
+    comun: { data: { meta: {}, preguntas: [] }, label: 'Batería común', sub: 'Temario común · 200 preguntas' },
+    fem: { data: { meta: {}, preguntas: [] }, label: 'INF Enfermedades Infecciosas', sub: 'Enfermedades Infecciosas · 500 preguntas' },
+    mi: { data: { meta: {}, preguntas: [] }, label: 'Medicina Interna', sub: 'Medicina Interna · 500 preguntas' }
   };
   const BAT_KEYS = Object.keys(BATS);
 
-  const questions = {};
-  for (const k of Object.keys(BATS)) {
-    for (const q of BATS[k].data.preguntas) {
-      questions[k + '-' + q.numero] = Object.assign({ uid: k + '-' + q.numero, bat: k }, q);
-    }
-  }
-
-  // ============================================================
-  //  Utilidades
-  // ============================================================
-  const $ = (s) => document.querySelector(s);
-  const el = (t, c, h) => { const n = document.createElement(t); if (c) n.className = c; if (h != null) n.innerHTML = h; return n; };
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
-  const norm = (s) => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  const LS = 'ope-ana-v1';
-  const CONFIG = window.OPE_CONFIG || {};
-  const HAS_CONFIG = !!(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY &&
-    !/TU-PROYECTO|TU-ANON-KEY/i.test(CONFIG.SUPABASE_URL + ' ' + CONFIG.SUPABASE_ANON_KEY));
-
-  // ============================================================
-  //  Agrupación de casos clínicos (INF Enfermedades Infecciosas y Medicina Interna)
-  // ============================================================
-  const cases = {};
-  for (const q of Object.values(questions)) {
-    if (q.caso == null) continue;
-    const key = q.bat + ':' + q.caso;
-    const c = cases[key] || (cases[key] = { key: key, id: q.caso, bat: q.bat, questions: [], contexto: '' });
-    c.questions.push(q);
-  }
-  for (const c of Object.values(cases)) {
-    c.questions.sort((a, b) => a.numero - b.numero);
-    c.desde = c.questions[0].numero;
-    c.hasta = c.questions[c.questions.length - 1].numero;
-    c.contexto = c.bat === 'mi'
-      ? String(c.questions[0].contexto || '').trim()
-      : cleanCaseContext(c.questions);
-  }
-
-  // En el dataset original, la última opción de algunos casos arrastra el
-  // enunciado del caso siguiente. Lo recortamos para no mostrar texto ajeno.
-  const caseStarts = Object.values(cases)
-    .map(c => ({ bat: c.bat, id: c.id, text: c.contexto.slice(0, 60) }))
-    .filter(x => x.text.length > 20);
-  for (const q of Object.values(questions)) {
-    if (!q.opciones) continue;
-    for (const k of Object.keys(q.opciones)) {
-      const v = q.opciones[k];
-      for (const c of caseStarts) {
-        if (c.bat === q.bat && c.id === q.caso) continue;
-        const i = v.indexOf(c.text);
-        if (i > 0) { q.opciones[k] = v.slice(0, i).trim(); break; }
+  function rebuildDataset(raw) {
+    if (raw) RAW = raw;
+    FUENTES = RAW.fuentes || [];
+    questions = {};
+    for (const k of BAT_KEYS) {
+      BATS[k].data = RAW[k] || { meta: {}, preguntas: [] };
+      for (const q of BATS[k].data.preguntas || []) {
+        questions[k + '-' + q.numero] = Object.assign({}, q, { uid: k + '-' + q.numero, bat: k });
       }
     }
+
+    // Agrupación de casos clínicos por batería (INF y Medicina Interna).
+    cases = {};
+    for (const q of Object.values(questions)) {
+      if (q.caso == null) continue;
+      const key = q.bat + ':' + q.caso;
+      const c = cases[key] || (cases[key] = { key: key, id: q.caso, bat: q.bat, questions: [], contexto: '' });
+      c.questions.push(q);
+    }
+    for (const c of Object.values(cases)) {
+      c.questions.sort((a, b) => a.numero - b.numero);
+      c.desde = c.questions[0].numero;
+      c.hasta = c.questions[c.questions.length - 1].numero;
+      c.contexto = c.bat === 'mi'
+        ? String(c.questions[0].contexto || '').trim()
+        : cleanCaseContext(c.questions);
+    }
+
+    // En el dataset original, la última opción de algunos casos arrastra el
+    // enunciado del caso siguiente. Lo recortamos para no mostrar texto ajeno.
+    const caseStarts = Object.values(cases)
+      .map(c => ({ bat: c.bat, id: c.id, text: c.contexto.slice(0, 60) }))
+      .filter(x => x.text.length > 20);
+    for (const q of Object.values(questions)) {
+      if (!q.opciones) continue;
+      for (const k of Object.keys(q.opciones)) {
+        const v = q.opciones[k];
+        for (const c of caseStarts) {
+          if (c.bat === q.bat && c.id === q.caso) continue;
+          const i = v.indexOf(c.text);
+          if (i > 0) { q.opciones[k] = v.slice(0, i).trim(); break; }
+        }
+      }
+    }
+
+    unitCache = {};
   }
 
   // El campo `contexto` de los casos incluye el enunciado + todas las preguntas
@@ -86,7 +81,19 @@
     return ctx;
   }
 
-  const unitCache = {};
+  rebuildDataset(EMBEDDED);
+
+  // ============================================================
+  //  Utilidades
+  // ============================================================
+  const $ = (s) => document.querySelector(s);
+  const el = (t, c, h) => { const n = document.createElement(t); if (c) n.className = c; if (h != null) n.innerHTML = h; return n; };
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+  const norm = (s) => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const LS = 'ope-ana-v1';
+  const CONFIG = window.OPE_CONFIG || {};
+  const HAS_CONFIG = !!(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY &&
+    !/TU-PROYECTO|TU-ANON-KEY/i.test(CONFIG.SUPABASE_URL + ' ' + CONFIG.SUPABASE_ANON_KEY));
   function unitsFor(bat) {
     if (unitCache[bat]) return unitCache[bat];
     const list = [];
@@ -323,6 +330,67 @@
     catch (e) { return String(s || ''); }
   };
 
+  async function loadRemoteDataset() {
+    if (!SB) return false;
+    try {
+      const [batRes, bibRes] = await Promise.all([
+        SB.from('batteries').select('id,meta'),
+        SB.from('bibliography').select('id,grupo,data')
+      ]);
+      if (batRes.error) throw batRes.error;
+      if (bibRes.error) throw bibRes.error;
+
+      let rows = [];
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await SB.from('questions')
+          .select('battery,numero,contexto,caso,pregunta,opciones,answer,confidence,source,tags,notas,tema,tema_id')
+          .order('battery', { ascending: true })
+          .order('numero', { ascending: true })
+          .range(from, from + 999);
+        if (error) throw error;
+        rows = rows.concat(data || []);
+        if (!data || data.length < 1000) break;
+      }
+      if (!rows.length) return false;
+
+      const remote = {};
+      for (const k of BAT_KEYS) remote[k] = { meta: {}, preguntas: [] };
+      for (const b of batRes.data || []) {
+        remote[b.id] = { meta: b.meta || {}, preguntas: [] };
+      }
+      for (const r of rows) {
+        const b = remote[r.battery];
+        if (!b) continue;
+        b.preguntas.push({
+          numero: r.numero,
+          contexto: r.contexto || '',
+          caso: r.caso,
+          pregunta: r.pregunta,
+          opciones: r.opciones || {},
+          answer: r.answer,
+          confidence: r.confidence,
+          source: r.source,
+          tags: r.tags || [],
+          notas: r.notas,
+          tema: r.tema,
+          tema_id: r.tema_id
+        });
+      }
+      remote.fuentes = (bibRes.data || []).map(r =>
+        Object.assign({}, r.data || {}, { id: r.id, grupo: r.grupo || (r.data || {}).grupo })
+      );
+      if (!remote.fuentes.length) remote.fuentes = EMBEDDED.fuentes || [];
+
+      const total = BAT_KEYS.reduce((n, k) => n + (remote[k].preguntas.length || 0), 0);
+      if (!total) return false;
+      rebuildDataset(remote);
+      return true;
+    } catch (e) {
+      console.warn('[dataset] No se pudo cargar desde Supabase; se usa la copia embebida.', e.message || e);
+      return false;
+    }
+  }
+
   async function initSupabase() {
     if (!HAS_CONFIG) { if (location.hash === '#/admin') setPage('preguntas'); showSetupBanner('local'); return; }
     if (!window.supabase) { if (location.hash === '#/admin') setPage('preguntas'); showSetupBanner('cdn'); return; }
@@ -330,9 +398,15 @@
       SB = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, {
         auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
       });
+      const remoteLoaded = await loadRemoteDataset();
       await loadQuestionOverrides();
       const { data } = await SB.auth.getSession();
       await setSession(data.session || null);
+      if (remoteLoaded) {
+        renderTopics();
+        renderAttemptSelect();
+        setPage(state.page, { skipHash: true, render: true });
+      }
       SB.auth.onAuthStateChange((event, sess) => {
         if (event === 'SIGNED_OUT') { setSession(null); return; }
         if (sess && (!session || sess.user.id !== session.user.id)) setTimeout(() => setSession(sess), 0);
@@ -474,6 +548,8 @@
       toast('No se pudo guardar la corrección: ' + error.message + '. ¿Has ejecutado sql/migrate_question_overrides.sql?', 'err');
       return;
     }
+    const { error: qErr } = await SB.from('questions').update({ answer: newAnswer }).eq('uid', uid);
+    if (qErr) console.warn('[questions] no se pudo actualizar la respuesta base:', qErr.message);
     overrides[uid] = { question_uid: uid, answer: newAnswer, previous_answer: oldAnswer, updated_at: now };
     q.answer = newAnswer;
     applyQuestionOverrides();

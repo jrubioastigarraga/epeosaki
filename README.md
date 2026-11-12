@@ -1,6 +1,6 @@
 # epeosaki — práctica de preguntas OPE Osakidetza
 
-Sitio estático (GitHub Pages) con 1.200 preguntas tipo test:
+Sitio estático (GitHub Pages) con 1.200 preguntas tipo test. Las preguntas, opciones, respuestas y bibliografía se guardan en **Supabase**; `index.html` conserva una copia embebida como respaldo por si falla la conexión.
 
 - **Batería común**: 200 preguntas (temario normativo).
 - **INF Enfermedades Infecciosas**: 500 preguntas.
@@ -39,6 +39,9 @@ Además, la aplicación se conecta a **Supabase** para tener:
    - `attempt_groups`: cada intento (puede quedar incompleto).
    - `attempts`: respuestas de cada intento.
    - `question_overrides`: respuestas correctas corregidas por administradores.
+   - `batteries`: metadatos de las baterías.
+   - `questions`: las 1.200 preguntas, opciones y respuestas.
+   - `bibliography`: fuentes de la bibliografía.
    - funciones `is_admin()`, `question_confirmation_stats()`, `question_failure_stats()`, triggers y políticas RLS.
 
 > En este repositorio ya está ejecutado sobre el proyecto `ope_ana` (`idydmepueznvspefottp`).
@@ -46,6 +49,14 @@ Además, la aplicación se conecta a **Supabase** para tener:
 > Si actualizas desde la versión anterior (una sola fila por pregunta en `attempts`), ejecuta también [`sql/migrate_attempt_groups.sql`](sql/migrate_attempt_groups.sql). En `ope_ana` ya está aplicada.
 
 > Para activar las correcciones de respuesta del administrador, ejecuta también [`sql/migrate_question_overrides.sql`](sql/migrate_question_overrides.sql). Es necesario para que el botón **Aplicar** de las discrepancias pueda guardar el cambio.
+
+> Para guardar todo el contenido en Supabase, ejecuta [`sql/migrate_dataset_to_supabase.sql`](sql/migrate_dataset_to_supabase.sql). Después, sube las preguntas y la bibliografía con:
+>
+> ```bash
+> SUPABASE_ACCESS_TOKEN=sbp_... node tools/seed_supabase.cjs
+> ```
+>
+> En `ope_ana` ya está aplicado y las 1.200 preguntas están cargadas.
 
 > Para que los usuarios puedan guardar intentos y confirmaciones de la batería **Medicina Interna** (`mi`), ejecuta [`sql/migrate_add_mi_battery.sql`](sql/migrate_add_mi_battery.sql). Amplía las restricciones de `question_uid` y `battery` para aceptar las preguntas `mi-1 ... mi-500`.
 
@@ -184,7 +195,7 @@ GitHub Pages sirve el contenido de la rama configurada (normalmente `main` / ra�
 ## 6. Estructura
 
 ```
-index.html              aplicación + dataset de las 700 preguntas
+index.html              aplicación + dataset embebido de respaldo
 app.js                  lógica de la aplicación (casos, usuarios, confirmaciones)
 config.js               URL y clave anon de Supabase
 favicon.svg             icono del sitio
@@ -193,6 +204,8 @@ sql/schema.sql          tablas, funciones, triggers y políticas RLS
 sql/migrate_attempt_groups.sql  migración de progreso antiguo a intentos
 sql/migrate_question_overrides.sql  tabla para corregir respuestas (administradores)
 sql/migrate_add_mi_battery.sql  amplía las restricciones para la batería Medicina Interna
+sql/migrate_dataset_to_supabase.sql  tablas batteries, questions y bibliography
+tools/seed_supabase.cjs sube a Supabase las preguntas y la bibliografía
 bibliografia/           leyes, guías y manuales (lectores + PDF)
 bibliografia/mi/        bibliografía de Medicina Interna
 ```
