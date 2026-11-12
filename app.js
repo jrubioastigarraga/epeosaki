@@ -2,7 +2,8 @@
   'use strict';
 
   // Datos embebidos: se usan como respaldo si Supabase no está disponible.
-  const EMBEDDED = JSON.parse(document.getElementById('dataset').textContent);
+  const datasetEl = document.getElementById('dataset');
+  const EMBEDDED = datasetEl ? JSON.parse(datasetEl.textContent || '{}') : {};
   let RAW = EMBEDDED;
   let FUENTES = [];
   let questions = {};
