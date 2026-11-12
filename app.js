@@ -564,7 +564,13 @@
     }
     const oldAnswer = q.answer;
     const label = String(newAnswer) + ') ' + String(q.opciones[newAnswer] || '').slice(0, 90);
-    if (!confirm('¿Cambiar la respuesta correcta de la pregunta ' + q.numero + ' a «' + label + '»?\n\nEl cambio se aplica a todos los usuarios y recalcula sus intentos.')) return;
+    const ok = await openAsk({
+      title: 'Cambiar respuesta correcta',
+      text: '¿Cambiar la respuesta correcta de la pregunta ' + q.numero + ' a «' + label + '»?\n\nEl cambio se aplica a todos los usuarios y recalcula sus intentos.',
+      okText: 'Cambiar',
+      danger: true
+    });
+    if (!ok) return;
     const now = new Date().toISOString();
     const { error } = await SB.from('question_overrides').upsert({
       question_uid: uid,
@@ -915,6 +921,29 @@
     toast('Bloques guardados', 'ok');
     applyBlockVisibility();
     renderAll(true);
+  }
+
+  // ---- Modal genérico de confirmación/aviso (sustituye a confirm/alert nativos) ----
+  let askResolve = null;
+  function openAsk(opts) {
+    const m = $('#askModal');
+    if (!m) return Promise.resolve(!opts || !opts.info);
+    $('#askTitle').textContent = opts.title || 'Confirmar';
+    $('#askText').textContent = opts.text || '';
+    const ok = $('#askOk'), cancel = $('#askCancel');
+    ok.textContent = opts.okText || 'Aceptar';
+    if (opts.danger) { ok.style.background = 'var(--bad)'; ok.style.borderColor = 'var(--bad)'; ok.style.color = '#fff'; }
+    else { ok.style.background = ''; ok.style.borderColor = ''; ok.style.color = ''; }
+    cancel.hidden = !!opts.info;
+    m.classList.add('open');
+    setTimeout(() => { if (ok) ok.focus(); }, 40);
+    return new Promise(res => { askResolve = res; });
+  }
+  function closeAsk(result) {
+    const m = $('#askModal');
+    if (!m || !m.classList.contains('open')) return;
+    m.classList.remove('open');
+    if (askResolve) { const r = askResolve; askResolve = null; r(!!result); }
   }
 
   function openDelete() {
@@ -1848,7 +1877,8 @@
       });
       body.querySelectorAll('[data-delconf]').forEach(b => {
         b.onclick = async () => {
-          if (!confirm('¿Eliminar esta confirmación?')) return;
+          const ok = await openAsk({ title: 'Eliminar confirmación', text: '¿Eliminar esta confirmación?', okText: 'Eliminar', danger: true });
+          if (!ok) return;
           const { error: e } = await SB.from('confirmations').delete().eq('id', b.dataset.delconf);
           if (e) { toast('No se pudo eliminar: ' + e.message, 'err'); return; }
           toast('Confirmación eliminada', 'ok');
@@ -2031,7 +2061,7 @@
     state.status = 'wrong'; renderList();
     const arr = poolUnits();
     if (arr.length) { goUnit(arr[0]); closeSidebar(); }
-    else alert('No hay preguntas falladas todavía.');
+    else openAsk({ title: 'Sin preguntas falladas', text: 'No hay preguntas falladas todavía.', okText: 'De acuerdo', info: true });
   };
   $('#menuBtn').onclick = () => {
     const s = $('#sidebar');
@@ -2094,6 +2124,11 @@
   $('#homeLogin').onclick = () => openAuth('login');
   $('#authModal').onclick = (e) => { if (e.target.id === 'authModal') $('#authModal').classList.remove('open'); };
 
+  // Modal genérico de confirmación/aviso
+  $('#askOk').onclick = () => closeAsk(true);
+  $('#askCancel').onclick = () => closeAsk(false);
+  $('#askModal').onclick = (e) => { if (e.target.id === 'askModal') closeAsk(false); };
+
   // Discrepancias
   $('#disputeClose').onclick = () => $('#disputeModal').classList.remove('open');
   $('#disputeCancel').onclick = () => $('#disputeModal').classList.remove('open');
@@ -2131,6 +2166,8 @@
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
+      const ask = $('#askModal');
+      if (ask && ask.classList.contains('open')) { closeAsk(false); return; }
       ['#authModal', '#disputeModal', '#blocksModal', '#deleteModal'].forEach(s => {
         const n = $(s); if (n) n.classList.remove('open');
       });

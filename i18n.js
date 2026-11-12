@@ -179,6 +179,14 @@
     " y pulsa ": " eta sakatu ",
     ". El cambio se guarda para todos los usuarios.": ". Aldaketa erabiltzaile guztientzat gordetzen da.",
     "¿Eliminar esta confirmación?": "Berrespen hau ezabatu?",
+    "Confirmar": "Berretsi",
+    "Cambiar respuesta correcta": "Erantzun zuzena aldatu",
+    "Cambiar": "Aldatu",
+    "Aceptar": "Onartu",
+    "De acuerdo": "Ados",
+    "Eliminar confirmación": "Berrespena ezabatu",
+    "Sin preguntas falladas": "Ez dago huts eginiko galderarik",
+    "No hay preguntas falladas todavía.": "Oraindik ez dago huts eginiko galderarik.",
 
     "Ranking global o de tus propios intentos.": "Sailkapen globala edo zure saiakeren sailkapena.",
     "Todavía no hay preguntas falladas registradas.": "Oraindik ez dago huts egindako galderarik erregistratuta.",
@@ -274,6 +282,9 @@
     [/^No se pudo guardar la confirmación: (.*)$/, function (m) { return 'Ezin izan da berrespena gorde: ' + m[1]; }],
     [/^No se pudo eliminar la cuenta: (.*)$/, function (m) { return 'Ezin izan da kontua ezabatu: ' + m[1]; }],
     [/^No se pudo cambiar el rol: (.*)$/, function (m) { return 'Ezin izan da rola aldatu: ' + m[1]; }],
+    [/^¿Cambiar la respuesta correcta de la pregunta (\d+) a «([^»]*)»\?\n\nEl cambio se aplica a todos los usuarios y recalcula sus intentos\.$/, function (m) {
+      return '«' + m[2] + '» izatera aldatu nahi duzu ' + m[1] + '. galderaren erantzun zuzena?\n\nAldaketa erabiltzaile guztiei aplikatzen zaie eta beren saiakerak birkalkulatzen dira.';
+    }],
     [/^Error: (.*)$/, function (m) { return 'Errorea: ' + m[1]; }]
   ];
 
