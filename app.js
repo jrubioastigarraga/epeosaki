@@ -85,7 +85,14 @@
     return ctx;
   }
 
-  rebuildDataset(EMBEDDED);
+  const DS_CACHE = 'epeosaki-dataset-v1';
+  function readDatasetCache() {
+    try {
+      const c = JSON.parse(localStorage.getItem(DS_CACHE) || 'null');
+      return c && c.data && c.data.comun ? c.data : null;
+    } catch (e) { return null; }
+  }
+  rebuildDataset(readDatasetCache() || EMBEDDED);
 
   // ============================================================
   //  Utilidades
@@ -338,23 +345,30 @@
   async function loadRemoteDataset() {
     if (!SB) return false;
     try {
-      const [batRes, bibRes] = await Promise.all([
+      const questionPage = (from) => SB.from('questions')
+        .select('battery,numero,contexto,caso,pregunta,opciones,answer,confidence,source,tags,notas,tema,tema_id')
+        .order('battery', { ascending: true })
+        .order('numero', { ascending: true })
+        .range(from, from + 999);
+      const [batRes, bibRes, q0, q1] = await Promise.all([
         SB.from('batteries').select('id,meta'),
-        SB.from('bibliography').select('id,grupo,data')
+        SB.from('bibliography').select('id,grupo,data'),
+        questionPage(0),
+        questionPage(1000)
       ]);
       if (batRes.error) throw batRes.error;
       if (bibRes.error) throw bibRes.error;
+      if (q0.error) throw q0.error;
+      if (q1.error) throw q1.error;
 
-      let rows = [];
-      for (let from = 0; ; from += 1000) {
-        const { data, error } = await SB.from('questions')
-          .select('battery,numero,contexto,caso,pregunta,opciones,answer,confidence,source,tags,notas,tema,tema_id')
-          .order('battery', { ascending: true })
-          .order('numero', { ascending: true })
-          .range(from, from + 999);
-        if (error) throw error;
-        rows = rows.concat(data || []);
-        if (!data || data.length < 1000) break;
+      let rows = (q0.data || []).concat(q1.data || []);
+      if ((q1.data || []).length === 1000) {
+        for (let from = 2000; ; from += 1000) {
+          const { data, error } = await questionPage(from);
+          if (error) throw error;
+          rows = rows.concat(data || []);
+          if (!data || data.length < 1000) break;
+        }
       }
       if (!rows.length) return false;
 
@@ -388,6 +402,7 @@
 
       const total = BAT_KEYS.reduce((n, k) => n + (remote[k].preguntas.length || 0), 0);
       if (!total) return false;
+      try { localStorage.setItem(DS_CACHE, JSON.stringify({ ts: Date.now(), data: remote })); } catch (e) { /* cuota llena: se carga siempre desde Supabase */ }
       rebuildDataset(remote);
       return true;
     } catch (e) {
@@ -403,9 +418,16 @@
       SB = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, {
         auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
       });
-      const remoteLoaded = await loadRemoteDataset();
-      await loadQuestionOverrides();
-      const { data } = await SB.auth.getSession();
+      const remoteP = loadRemoteDataset();
+      const overP = loadQuestionOverrides();
+      const sessP = SB.auth.getSession();
+      const remoteLoaded = await remoteP;
+      await overP;
+      if (remoteLoaded) {
+        renderAttemptSelect();
+        setPage(state.page, { skipHash: true, render: true });
+      }
+      const { data } = await sessP;
       await setSession(data.session || null);
       if (autoHome && session) { autoHome = false; setPage('preguntas', { skipHash: true, render: false }); }
       if (remoteLoaded) {
