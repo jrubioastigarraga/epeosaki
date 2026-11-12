@@ -1,10 +1,13 @@
 # epeosaki — práctica de preguntas OPE Osakidetza
 
-Sitio estático (GitHub Pages) con 700 preguntas tipo test:
+Sitio estático (GitHub Pages) con 1.200 preguntas tipo test:
 
 - **Batería común**: 200 preguntas (temario normativo).
 - **FEM Enfermedades Infecciosas**: 500 preguntas.
   - Preguntas **451–500** agrupadas en **10 casos clínicos**. Al abrir un caso se muestran de una vez todas sus preguntas (por ejemplo, el caso 1 muestra las preguntas 451–455).
+- **FEM Medicina Interna**: 500 preguntas.
+  - Preguntas **451–500** con **13 casos clínicos**; cada pregunta muestra su enunciado de caso.
+  - Incluye 2 preguntas defectuosas sin respuesta válida, marcadas para revisión.
 
 Además, la aplicación se conecta a **Supabase** para tener:
 
@@ -43,6 +46,8 @@ Además, la aplicación se conecta a **Supabase** para tener:
 > Si actualizas desde la versión anterior (una sola fila por pregunta en `attempts`), ejecuta también [`sql/migrate_attempt_groups.sql`](sql/migrate_attempt_groups.sql). En `ope_ana` ya está aplicada.
 
 > Para activar las correcciones de respuesta del administrador, ejecuta también [`sql/migrate_question_overrides.sql`](sql/migrate_question_overrides.sql). Es necesario para que el botón **Aplicar** de las discrepancias pueda guardar el cambio.
+
+> Para que los usuarios puedan guardar intentos y confirmaciones de la batería **Medicina Interna** (`mi`), ejecuta [`sql/migrate_add_mi_battery.sql`](sql/migrate_add_mi_battery.sql). Amplía las restricciones de `question_uid` y `battery` para aceptar las preguntas `mi-1 ... mi-500`.
 
 ### 1.3 Copiar las claves
 
@@ -187,7 +192,9 @@ vendor/supabase.js      cliente oficial de Supabase (UMD, servido en local)
 sql/schema.sql          tablas, funciones, triggers y políticas RLS
 sql/migrate_attempt_groups.sql  migración de progreso antiguo a intentos
 sql/migrate_question_overrides.sql  tabla para corregir respuestas (administradores)
+sql/migrate_add_mi_battery.sql  amplía las restricciones para la batería Medicina Interna
 bibliografia/           leyes, guías y manuales (lectores + PDF)
+bibliografia/mi/        bibliografía de Medicina Interna
 ```
 
 ---

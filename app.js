@@ -8,8 +8,10 @@
   const FUENTES = RAW.fuentes || [];
   const BATS = {
     comun: { data: RAW.comun, label: 'Batería común', sub: 'Temario común · 200 preguntas' },
-    fem: { data: RAW.fem, label: 'FEM Enfermedades Infecciosas', sub: 'Temario específico · 500 preguntas' }
+    fem: { data: RAW.fem, label: 'FEM Enfermedades Infecciosas', sub: 'Temario específico · 500 preguntas' },
+    mi: { data: RAW.mi, label: 'FEM Medicina Interna', sub: 'Medicina Interna · 500 preguntas' }
   };
+  const BAT_KEYS = Object.keys(BATS);
 
   const questions = {};
   for (const k of Object.keys(BATS)) {
@@ -110,7 +112,9 @@
   function topicOf(q) {
     if (q.tema) return q.tema;
     if (q.caso != null) return 'Casos clínicos';
-    return q.bat === 'fem' ? 'FEM · general' : 'General';
+    if (q.bat === 'fem') return 'FEM · general';
+    if (q.bat === 'mi') return 'MI · general';
+    return 'General';
   }
 
   // ============================================================
@@ -124,14 +128,14 @@
     : 'g-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 
   function emptyStore() {
-    return { v: 2, owner: null, groups: [], active: { comun: null, fem: null } };
+    return { v: 2, owner: null, groups: [], active: { comun: null, fem: null, mi: null } };
   }
 
   function migrateLegacyStore(s) {
     const st = emptyStore();
     st.owner = s.owner || null;
     const answers = s.answers || {};
-    for (const bat of ['comun', 'fem']) {
+    for (const bat of BAT_KEYS) {
       const subset = {};
       for (const [uid, a] of Object.entries(answers)) {
         if (uid.startsWith(bat + '-')) subset[uid] = a;
@@ -157,7 +161,8 @@
     if (s && s.v === 2 && Array.isArray(s.groups)) store = s;
     else if (s && s.answers) store = migrateLegacyStore(s);
   } catch (e) { /* almacenamiento no disponible */ }
-  if (!store.active) store.active = { comun: null, fem: null };
+  if (!store.active) store.active = { comun: null, fem: null, mi: null };
+  for (const b of BAT_KEYS) if (!(b in store.active)) store.active[b] = null;
   if (!Array.isArray(store.groups)) store.groups = [];
   const save = () => { try { localStorage.setItem(LS, JSON.stringify(store)); } catch (e) { /* almacenamiento no disponible */ } };
 
@@ -478,7 +483,7 @@
       // pertenecen al último usuario que inició sesión.
       if (store.owner && store.owner !== session.user.id) {
         store.groups = [];
-        store.active = { comun: null, fem: null };
+        store.active = { comun: null, fem: null, mi: null };
         save();
       }
       store.owner = session.user.id;
@@ -551,7 +556,7 @@
       }
 
       // Elegir intento activo si no hay uno válido.
-      for (const bat of ['comun', 'fem']) {
+      for (const bat of BAT_KEYS) {
         if (!store.active[bat] || !groupById(store.active[bat])) {
           const gs = groupsFor(bat);
           store.active[bat] = gs.length ? gs[0].id : null;
@@ -729,7 +734,7 @@
         session = null; profile = null; myConf = {}; confirmStats = {};
         // No dejar intentos del usuario anterior en el navegador.
         store.groups = [];
-        store.active = { comun: null, fem: null };
+        store.active = { comun: null, fem: null, mi: null };
         store.owner = null;
         state.reviewGroupId = null;
         if (state.page === 'admin') setPage('preguntas', { render: false });
@@ -1150,6 +1155,7 @@
       <span class="num">Pregunta ${q.numero}</span>
       ${opts.caseView ? '' : `<span class="tag">${esc(topicOf(q))}</span>`}
       ${confirmBadges(q)}
+      ${!q.answer ? '<span class="tag conf-bad">Sin respuesta válida</span>' : ''}
       ${review && !a
         ? '<span class="tag conf-none">No respondida en este intento</span>'
         : (a ? confidenceBadge(q.confidence || 0) : '<span class="tag">Respuesta deducida · no oficial</span>')}
@@ -1164,6 +1170,9 @@
       </div>`;
     }
     html += `<h2 class="question">${esc(q.pregunta)}</h2>`;
+    if (!q.answer) {
+      html += `<div class="notes">${esc(q.notas || 'Pregunta defectuosa: no tiene una respuesta correcta validada.')} No se puede responder hasta que un administrador establezca la respuesta correcta.</div>`;
+    }
     html += '<div class="options">' + entries.map(([k, v]) => {
       let cls = 'opt';
       if (a) {
@@ -1171,7 +1180,7 @@
         else if (k === a.pick) cls += ' wrong';
         else cls += ' dim';
       }
-      return `<button class="${cls}" type="button" data-k="${k}" data-uid="${q.uid}" ${(a || review) ? 'disabled' : ''}><span class="k">${k}</span><span class="t">${esc(v)}</span></button>`;
+      return `<button class="${cls}" type="button" data-k="${k}" data-uid="${q.uid}" ${(a || review || !q.answer) ? 'disabled' : ''}><span class="k">${k}</span><span class="t">${esc(v)}</span></button>`;
     }).join('') + '</div>';
 
     if (a) {
@@ -1184,7 +1193,7 @@
     } else if (review) {
       html += '<div class="notes">Esta pregunta no se respondió en este intento.</div>';
     }
-    if (!review) html += confirmRow(q);
+    if (!review && q.answer) html += confirmRow(q);
     return html;
   }
 
@@ -1363,7 +1372,7 @@
   // ============================================================
   function answer(uid, letter) {
     const q = questions[uid];
-    if (!q || state.reviewGroupId) return;
+    if (!q || !q.answer || state.reviewGroupId) return;
     const g = ensureActiveGroup(q.bat);
     if (g.answers[uid]) return;
     const ts = Date.now();
@@ -1402,7 +1411,7 @@
     if (!q) return;
     if (state.page !== 'preguntas') setPage('preguntas', { skipHash: true, render: false });
     state.uid = uid;
-    if (q.caso != null) { state.view = 'case'; state.caseId = q.caso; }
+    if (q.bat === 'fem' && q.caso != null) { state.view = 'case'; state.caseId = q.caso; }
     else { state.view = 'q'; state.caseId = null; }
     try { history.replaceState(null, '', '#' + uid); } catch (e) { /* file:// */ }
     renderCard(false);
@@ -1633,7 +1642,7 @@
       const q = questions[r.question_uid];
       if (!q) return;
       const rate = Number(r.failure_rate) || 0;
-      const batLabel = q.bat === 'comun' ? 'Común' : 'FEM';
+      const batLabel = q.bat === 'comun' ? 'Común' : q.bat === 'mi' ? 'MI' : 'FEM';
       const caseLabel = q.caso != null ? ` &middot; Caso ${q.caso}` : '';
       const width = Math.max(4, Math.round(r.failures * 100 / maxFail));
       const text = q.pregunta.length > 160 ? q.pregunta.slice(0, 160) + '…' : q.pregunta;
@@ -1717,9 +1726,9 @@
   function renderBib(text) {
     const t = norm(text || '');
     const arr = FUENTES.filter(f => !t || norm(f.titulo + ' ' + (f.ref || '')).includes(t));
-    const groups = { comun: 'Temario común', fem: 'Temario específico (FEM Enfermedades Infecciosas)' };
+    const groups = { comun: 'Temario común', fem: 'Temario específico (FEM Enfermedades Infecciosas)', mi: 'Temario específico (FEM Medicina Interna)' };
     let html = '';
-    for (const g of ['comun', 'fem']) {
+    for (const g of BAT_KEYS) {
       const items = arr.filter(f => f.grupo === g);
       if (!items.length) continue;
       html += `<div class="bib-group">${groups[g]}</div>`;
@@ -1894,7 +1903,7 @@
   } else if (questions[hash]) {
     state.uid = hash;
     state.bat = questions[hash].bat;
-    if (questions[hash].caso != null) { state.view = 'case'; state.caseId = questions[hash].caso; }
+    if (questions[hash].bat === 'fem' && questions[hash].caso != null) { state.view = 'case'; state.caseId = questions[hash].caso; }
   }
   document.querySelectorAll('.tab[data-bat]').forEach(x => x.classList.toggle('on', x.dataset.bat === state.bat));
   $('#subtitle').textContent = BATS[state.bat].sub;
