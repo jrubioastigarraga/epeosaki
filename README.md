@@ -16,6 +16,7 @@ Además, la aplicación se conecta a **Supabase** para tener:
 - **Confirmación de respuestas** por parte de los usuarios (y aviso de discrepancias).
 - **Intentos agrupados**: cada intento guarda las preguntas que hayas respondido, aunque no completes todas. Puedes revisar cualquier intento pasado desde el selector de la barra lateral.
 - **Akatsak**: ranking con tus propios fallos (requiere iniciar sesión).
+- **Baremo**: calculadora de méritos del Anexo III de la Resolución 1679/2026 (médico/a familia-EAP, BOPV 30-10-2026); se guarda en el navegador.
 - Panel de administración en el menú lateral para gestionar roles, revisar/eliminar confirmaciones y corregir la respuesta correcta desde las discrepancias.
 - Sincronización del progreso entre dispositivos (si se inicia sesión).
 
