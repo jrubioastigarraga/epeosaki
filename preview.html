@@ -311,9 +311,7 @@ table.admin .btn{padding:5px 8px;font-size:11.5px}
       <div class="stat"><b id="statOK">0%</b><span>aciertos</span></div>
       <div class="progress"><i id="bar"></i></div>
       <div class="authbox" id="authBox"></div>
-      <button class="btn" id="bibBtn" style="padding:8px 12px;font-size:13px">Bibliografía</button>
       <button class="iconbtn mobile-only" id="menuBtn" title="Menú" aria-label="Abrir menú">&#9776;</button>
-      <button class="iconbtn" id="resetBtn" title="Nuevo intento">&#8634;</button>
     </div>
   </header>
 
@@ -2181,7 +2179,6 @@ window.OPE_CONFIG = {
     renderAll(false);
     toast('Intentos borrados', 'ok');
   };
-  $('#resetBtn').onclick = () => startNewAttempt();
   $('#menuBtn').onclick = () => {
     const s = $('#sidebar');
     if (s.classList.contains('open')) closeSidebar();
@@ -2192,8 +2189,7 @@ window.OPE_CONFIG = {
     if (window.innerWidth > 900) closeSidebar();
   });
 
-  // Bibliografía (página normal dentro de la app)
-  $('#bibBtn').onclick = () => setPage('bibliografia', { push: true });
+  // Bibliografía (página normal dentro de la app, accesible desde el menú lateral)
   $('#bibSearch').oninput = (e) => renderBib(e.target.value);
 
   // Menú lateral: navegación entre páginas

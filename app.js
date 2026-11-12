@@ -1647,7 +1647,6 @@
     renderAll(false);
     toast('Intentos borrados', 'ok');
   };
-  $('#resetBtn').onclick = () => startNewAttempt();
   $('#menuBtn').onclick = () => {
     const s = $('#sidebar');
     if (s.classList.contains('open')) closeSidebar();
@@ -1658,8 +1657,7 @@
     if (window.innerWidth > 900) closeSidebar();
   });
 
-  // Bibliografía (página normal dentro de la app)
-  $('#bibBtn').onclick = () => setPage('bibliografia', { push: true });
+  // Bibliografía (página normal dentro de la app, accesible desde el menú lateral)
   $('#bibSearch').oninput = (e) => renderBib(e.target.value);
 
   // Menú lateral: navegación entre páginas
