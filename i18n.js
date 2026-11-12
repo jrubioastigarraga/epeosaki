@@ -2,7 +2,8 @@
   'use strict';
 
   var KEY = 'epeosaki-lang';
-  var lang = localStorage.getItem(KEY) === 'eu' ? 'eu' : 'es';
+  var saved = localStorage.getItem(KEY);
+  var lang = saved === 'es' ? 'es' : 'eu';
   document.documentElement.lang = lang;
 
   var EU = {
