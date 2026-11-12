@@ -1829,15 +1829,28 @@
       const all = [...groups.values()];
       const confs = all.filter(g => g.confirms > 0).length;
       const disc = all.filter(g => g.disputes > 0).length;
-      const filtered = adminConfFilter === 'disputes'
-        ? all.filter(g => g.disputes > 0)
-        : adminConfFilter === 'confirms'
-          ? all.filter(g => g.confirms > 0)
-          : all;
+      const pend = all.filter(g => g.disputes > 0 && !overrides[g.uid]).length;
+      const done = all.filter(g => g.disputes > 0 && overrides[g.uid]).length;
+      const filtered = adminConfFilter === 'pending'
+        ? all.filter(g => g.disputes > 0 && !overrides[g.uid])
+        : adminConfFilter === 'done'
+          ? all.filter(g => g.disputes > 0 && overrides[g.uid])
+          : adminConfFilter === 'disputes'
+            ? all.filter(g => g.disputes > 0)
+            : adminConfFilter === 'confirms'
+              ? all.filter(g => g.confirms > 0)
+              : all;
+      // Pendientes primero: así lo que falta por revisar queda arriba.
+      filtered.sort((a, b) => {
+        const pa = a.disputes > 0 && !overrides[a.uid] ? 0 : 1;
+        const pb = b.disputes > 0 && !overrides[b.uid] ? 0 : 1;
+        return pa - pb || String(b.last).localeCompare(String(a.last));
+      });
       const rows = filtered.map(g => {
         const q = questions[g.uid];
         const actual = q ? q.answer : null;
         const actualText = q && q.opciones ? q.opciones[actual] : '';
+        const ov = overrides[g.uid];
         const proposals = Object.entries(g.proposals).sort((a, b) => b[1] - a[1]);
         const newAns = proposals.length ? proposals[0][0] : (actual || 'a');
         const qText = q ? q.pregunta : g.uid;
@@ -1849,16 +1862,21 @@
                <button class="btn primary" type="button" data-apply-answer="${g.uid}">Aplicar</button>
              </div>`
           : '—';
-        const corrected = overrides[g.uid] ? ' <span class="pill">corregida</span>' : '';
+        const state = g.disputes > 0
+          ? (ov
+            ? `<span class="tag conf-ok">Aplicada</span><div class="admin-sub">${esc(String(ov.previous_answer || '?').toLowerCase())}) &rarr; <b>${esc(String(ov.answer || '').toLowerCase())})</b> ${esc(String((q && q.opciones[ov.answer]) || '').slice(0, 45))}</div>`
+            : '<span class="tag conf-bad">Pendiente</span>')
+          : '—';
         const propHtml = proposals.length
-          ? proposals.map(([k, n]) => `<div><b>${esc(k)})</b> ${n} persona${n === 1 ? '' : 's'}</div>`).join('')
+          ? proposals.map(([k, n]) => `<div><b>${esc(k)})</b> ${n} persona${n === 1 ? '' : 's'}${ov && String(ov.answer).toLowerCase() === k ? ' <span class="pill">aplicada</span>' : ''}</div>`).join('')
           : '—';
         const comHtml = g.comments.length
-          ? g.comments.map(c => `<div class="comment-item"><span>${esc(c.text)}</span><button class="btn" type="button" data-delconf="${c.id}">Eliminar</button></div>`).join('')
+          ? g.comments.map(c => `<div class="comment-item"><span><span class="tag conf-bad">No correcta</span> ${esc(c.text)}</span><button class="btn" type="button" data-delconf="${c.id}">Eliminar</button></div>`).join('')
           : '—';
-        return `<tr>
+        return `<tr${g.disputes > 0 && !ov ? ' class="row-pending"' : ''}>
           <td><div class="admin-name">${q ? 'Pregunta ' + q.numero : esc(g.uid)}</div><div class="admin-sub">${esc(qText.slice(0, 90))}${qText.length > 90 ? '…' : ''}</div></td>
-          <td>${actual ? `<b>${esc(actual)})</b> ${esc(actualText || '')}${corrected}` : '—'}</td>
+          <td>${actual ? `<b>${esc(String(actual).toLowerCase())})</b> ${esc(actualText || '')}` : '—'}</td>
+          <td>${state}</td>
           <td>${g.confirms ? `<span class="tag conf-ok">${g.confirms} persona${g.confirms === 1 ? '' : 's'}</span>` : '—'}</td>
           <td>${g.disputes ? `<span class="tag conf-bad">${g.disputes} persona${g.disputes === 1 ? '' : 's'}</span>` : '—'}</td>
           <td>${propHtml}</td>
@@ -1870,20 +1888,26 @@
           </div></td>
         </tr>`;
       }).join('');
-      const emptyMsg = adminConfFilter === 'disputes'
-        ? 'No hay discrepancias pendientes'
-        : adminConfFilter === 'confirms'
-          ? 'No hay confirmaciones'
-          : 'Sin confirmaciones todavía';
-      body.innerHTML = `<div class="stats-note">Una fila por pregunta. Las columnas indican cuántas personas confirman o discrepan y qué opción proponen. Las discrepancias no cambian la respuesta automáticamente: si procede, elige la respuesta correcta en <b>Corregir</b> y pulsa <b>Aplicar</b>. El cambio se guarda para todos los usuarios.</div>
+      const emptyMsg = adminConfFilter === 'pending'
+        ? 'No hay correcciones pendientes'
+        : adminConfFilter === 'done'
+          ? 'No hay correcciones aplicadas'
+          : adminConfFilter === 'disputes'
+            ? 'No hay discrepancias'
+            : adminConfFilter === 'confirms'
+              ? 'No hay confirmaciones'
+              : 'Sin confirmaciones todavía';
+      body.innerHTML = `<div class="stats-note">Una fila por pregunta. <b>Confirmaciones</b> son los usuarios que dan por correcta la respuesta; <b>no correctas</b> los que marcan que no lo es e indican otra opción. El <b>estado</b> muestra si la corrección está <b>pendiente</b> o ya <b>aplicada</b> (con la respuesta anterior y la nueva). Las discrepancias no cambian la respuesta automáticamente: si procede, elige la respuesta en <b>Corregir</b> y pulsa <b>Aplicar</b>; el cambio se guarda para todos los usuarios.</div>
         <div class="admin-filter">
           <button class="tab${adminConfFilter === 'all' ? ' on' : ''}" type="button" data-conf-filter="all">Todas (${all.length})</button>
-          <button class="tab${adminConfFilter === 'disputes' ? ' on' : ''}" type="button" data-conf-filter="disputes">Discrepancias (${disc})</button>
+          <button class="tab${adminConfFilter === 'pending' ? ' on' : ''}" type="button" data-conf-filter="pending">Pendientes (${pend})</button>
+          <button class="tab${adminConfFilter === 'done' ? ' on' : ''}" type="button" data-conf-filter="done">Aplicadas (${done})</button>
+          <button class="tab${adminConfFilter === 'disputes' ? ' on' : ''}" type="button" data-conf-filter="disputes">No correctas (${disc})</button>
           <button class="tab${adminConfFilter === 'confirms' ? ' on' : ''}" type="button" data-conf-filter="confirms">Confirmaciones (${confs})</button>
         </div>
         <div class="table-wrap"><table class="admin">
-        <thead><tr><th>Pregunta</th><th>Respuesta actual</th><th>Confirman</th><th>Discrepan</th><th>Opciones propuestas</th><th>Comentarios</th><th>Última</th><th>Corregir</th><th></th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="9" class="empty-row">${emptyMsg}</td></tr>`}</tbody>
+        <thead><tr><th>Pregunta</th><th>Respuesta actual</th><th>Estado</th><th>Confirmaciones</th><th>No correctas</th><th>Opciones propuestas</th><th>Comentarios</th><th>Última</th><th>Corregir</th><th></th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="10" class="empty-row">${emptyMsg}</td></tr>`}</tbody>
       </table></div>`;
       body.querySelectorAll('[data-conf-filter]').forEach(b => {
         b.onclick = () => {
