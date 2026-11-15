@@ -40,7 +40,9 @@ header{background:var(--panel);border-bottom:1px solid var(--line);padding:14px 
 aside{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);align-self:start;position:sticky;top:88px;max-height:calc(100vh - 108px);display:flex;flex-direction:column;overflow:hidden}
 .aside-head{padding:14px 14px 10px;border-bottom:1px solid var(--line)}
 .aside-mobile-head{display:none}
-.tabs{display:flex;gap:6px;margin-bottom:10px}
+.tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.bat-pick{display:block;font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px}
+.bat-pick select{margin-top:4px;width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);font-weight:600}
 .tab{flex:1;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:7px 8px;font-size:12.5px;font-weight:600;color:var(--muted)}
 .tab.on{background:var(--accent);border-color:var(--accent);color:#fff}
 .search{position:relative}
@@ -347,13 +349,27 @@ details#asideQuestions{display:block;background:var(--panel);border:1px solid va
 .home{padding:30px 32px}
 .home-kicker{display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);background:var(--accent-soft);border-radius:99px;padding:3px 10px}
 .home h2{font-size:24px;line-height:1.25;margin:12px 0 8px}
-.home-lead{font-size:15px;color:var(--ink2);margin:0 0 18px;max-width:720px}
+.home-lead{font-size:15px;color:var(--ink2);margin:0 0 22px;max-width:720px}
 .home-cta{display:flex;gap:9px;flex-wrap:wrap}
+.home-modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:0 0 22px}
+.mode-card{display:flex;align-items:center;gap:14px;text-align:left;padding:18px 18px;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:inherit;transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease}
+.mode-card:hover{border-color:var(--accent);box-shadow:var(--shadow);transform:translateY(-1px)}
+.mode-card:active{transform:none}
+.mc-ic{flex:0 0 auto;width:44px;height:44px;border-radius:13px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:20px}
+.mc-txt{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.mc-txt b{font-size:15.5px;font-weight:700}
+.mc-txt small{font-size:12.5px;color:var(--muted);line-height:1.4}
+.mc-go{flex:0 0 auto;font-size:18px;color:var(--muted)}
+.mode-card:hover .mc-go{color:var(--accent)}
 .home-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:24px 0 16px}
 .home-box{border:1px solid var(--line);border-radius:12px;padding:16px 18px;background:var(--surface)}
 .home-box h3{margin:0 0 10px;font-size:14px}
 .home-box p{font-size:13px;color:var(--ink2);margin:12px 0 0}
 .home-list{margin:0;padding-left:18px;font-size:13.5px;color:var(--ink2);display:grid;gap:6px}
+#homeBats{list-style:none;padding:0;gap:8px}
+#homeBats li{display:flex;flex-direction:column;gap:1px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel)}
+#homeBats li b{font-size:13.5px;color:var(--ink)}
+#homeBats li small{font-size:11.5px;color:var(--muted)}
 .home-foot{font-size:11.5px;color:var(--muted);margin:16px 0 0}
 .link-btn{border:0;background:none;padding:0;color:var(--accent);font-size:12.5px;font-weight:600;justify-self:start}
 .link-btn:hover{text-decoration:underline}
@@ -617,11 +633,17 @@ details#asideQuestions{border:0;border-radius:var(--radius);box-shadow:var(--sha
           <span class="home-kicker">OPE Osakidetza</span>
           <h2>Practica tipo test para la oposición de Osakidetza</h2>
           <p class="home-lead">epeosaki es una herramienta de práctica con preguntas tipo test, casos clínicos y la referencia exacta de la bibliografía donde está cada respuesta.</p>
-          <div class="home-cta">
-            <button class="btn primary" id="homeStart" type="button">Estudiar solo/a</button>
-            <button class="btn" id="homeGroupStart" type="button">Estudiar en grupo</button>
-            <button class="btn" id="homeSignup" type="button">Crear cuenta</button>
-            <button class="btn" id="homeLogin" type="button">Iniciar sesión</button>
+          <div class="home-modes">
+            <button class="mode-card" id="homeStart" type="button">
+              <span class="mc-ic">&#9998;</span>
+              <span class="mc-txt"><b>Estudiar solo/a</b><small>Responde a tu ritmo. Intentos, fallos y anotaciones privadas.</small></span>
+              <span class="mc-go">&rarr;</span>
+            </button>
+            <button class="mode-card" id="homeGroupStart" type="button">
+              <span class="mc-ic">&#128101;</span>
+              <span class="mc-txt"><b>Estudiar en grupo</b><small>Crear un grupo e invitar con un código. Veis juntos confirmaciones y comentarios.</small></span>
+              <span class="mc-go">&rarr;</span>
+            </button>
           </div>
           <div class="home-group" id="homeGroup" hidden>
             <h3>Estudiar en grupo</h3>
@@ -632,7 +654,7 @@ details#asideQuestions{border:0;border-radius:var(--radius);box-shadow:var(--sha
             <div class="home-box">
               <h3>Bloques disponibles</h3>
               <ul class="home-list" id="homeBats"></ul>
-              <p>Al crear tu cuenta eliges qué bloques quieres trabajar. Puedes cambiarlos en cualquier momento desde <b>Mis bloques</b>, en el menú de tu usuario.</p>
+              <p>Elige tus bloques desde <b>Mis bloques</b>, en el menú de tu usuario. Si no marcas ninguno, se muestran todos.</p>
             </div>
             <div class="home-box">
               <h3>Cómo funciona</h3>
@@ -657,6 +679,9 @@ details#asideQuestions{border:0;border-radius:var(--radius);box-shadow:var(--sha
             <button class="tab" data-bat="mi">MI 500</button>
             <button class="tab" data-bat="end">END 500</button>
           </div>
+          <label class="bat-pick" id="batPickWrap" hidden>Batería
+            <select id="batSelect" aria-label="Batería"></select>
+          </label>
           <div class="search">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
             <input id="search" type="search" placeholder="Buscar por texto o número⬦">

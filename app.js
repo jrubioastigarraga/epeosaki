@@ -969,12 +969,36 @@
     if (!opts || !opts.keepReview) state.reviewGroupId = null;
     $('#subtitle').textContent = BATS[bat].sub;
     document.querySelectorAll('.tab[data-bat]').forEach(x => x.classList.toggle('on', x.dataset.bat === bat));
+    const sel = $('#batSelect');
+    if (sel) sel.value = bat;
     renderAttemptSelect();
   }
 
   function allowedBats() {
     const mine = session && profile && Array.isArray(profile.blocks) ? profile.blocks : [];
     return mine.length ? BAT_KEYS.filter(k => mine.includes(k)) : BAT_KEYS.slice();
+  }
+
+  function batCount(k) {
+    const m = /(\d+)\s*preguntas/.exec(BATS[k].sub || '');
+    return m ? m[1] : '';
+  }
+
+  // Con sesión se muestran pestañas con tus bloques; sin sesión (o si hay
+  // muchas baterías) se usa un desplegable, que escala mejor.
+  function syncBatterySelector(allowed) {
+    const tabs = document.querySelector('.aside-head .tabs');
+    const wrap = $('#batPickWrap');
+    const sel = $('#batSelect');
+    if (!sel || !wrap) return;
+    const useSelect = !session || allowed.length > 4;
+    if (tabs) tabs.hidden = useSelect;
+    wrap.hidden = !useSelect;
+    sel.innerHTML = allowed.map(k => {
+      const n = batCount(k);
+      return `<option value="${k}">${esc(BAT_SHORT[k] + (n ? ' ' + n : ''))}</option>`;
+    }).join('');
+    sel.value = allowed.includes(state.bat) ? state.bat : allowed[0];
   }
 
   function switchBattery(bat) {
@@ -989,6 +1013,7 @@
   function applyBlockVisibility() {
     const allowed = allowedBats();
     document.querySelectorAll('.tab[data-bat]').forEach(t => { t.hidden = !allowed.includes(t.dataset.bat); });
+    syncBatterySelector(allowed);
     if (statsBat !== 'all' && !allowed.includes(statsBat)) statsBat = 'all';
     $('#statsBat').innerHTML = '<option value="all">Todas</option>' +
       allowed.map(k => `<option value="${k}">${BAT_SHORT[k]}</option>`).join('');
@@ -1876,12 +1901,10 @@
   const PAGES = ['inicio', 'preguntas', 'bibliografia', 'ranking', 'baremo', 'admin'];
 
   function renderHome() {
-    $('#homeBats').innerHTML = BAT_KEYS.map(k =>
-      `<li><b>${esc(BATS[k].label)}</b> · ${esc(BATS[k].sub)}</li>`
-    ).join('');
-    const guest = !session && HAS_CONFIG;
-    $('#homeSignup').hidden = !guest;
-    $('#homeLogin').hidden = !guest;
+    $('#homeBats').innerHTML = BAT_KEYS.map(k => {
+      const n = (BATS[k].data.preguntas || []).length;
+      return `<li><b>${esc(BATS[k].label)}</b><small>${n ? n + ' preguntas' : esc(BATS[k].sub)}</small></li>`;
+    }).join('');
     renderGroupChip();
     renderHomeGroup();
   }
@@ -2651,6 +2674,12 @@
   document.querySelectorAll('.tab[data-bat]').forEach(t => {
     t.onclick = () => switchBattery(t.dataset.bat);
   });
+  const batSel = $('#batSelect');
+  if (batSel) {
+    batSel.onchange = () => {
+      if (batSel.value) switchBattery(batSel.value);
+    };
+  }
 
   $('#fAttempt').onchange = e => {
     const v = e.target.value;
@@ -2753,11 +2782,12 @@
     panel.hidden = !panel.hidden;
     if (!panel.hidden) {
       renderHomeGroup();
-      try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { /* sin scroll */ }
+      try {
+        const y = panel.getBoundingClientRect().top + (window.scrollY || 0) - 90;
+        window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+      } catch (e) { /* sin scroll */ }
     }
   };
-  $('#homeSignup').onclick = () => openAuth('signup');
-  $('#homeLogin').onclick = () => openAuth('login');
   $('#authModal').onclick = (e) => { if (e.target.id === 'authModal') $('#authModal').classList.remove('open'); };
 
   // Modal genérico de confirmación/aviso
@@ -2863,6 +2893,7 @@
   }
   document.body.classList.toggle('page-preguntas', startPage === 'preguntas');
   document.querySelectorAll('.tab[data-bat]').forEach(x => x.classList.toggle('on', x.dataset.bat === state.bat));
+  syncBatterySelector(allowedBats());
   $('#subtitle').textContent = BATS[state.bat].sub;
   renderAttemptSelect();
   renderAll(false);
