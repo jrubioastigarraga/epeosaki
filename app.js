@@ -117,6 +117,9 @@
   //  Utilidades
   // ============================================================
   const $ = (s) => document.querySelector(s);
+  // Enlaza un evento solo si el elemento existe (evita romper el arranque
+  // si el HTML es de una versión distinta o llega incompleto).
+  const bind = (sel, ev, fn) => { const n = typeof sel === 'string' ? $(sel) : sel; if (n) n.addEventListener(ev, fn); return n; };
   const el = (t, c, h) => { const n = document.createElement(t); if (c) n.className = c; if (h != null) n.innerHTML = h; return n; };
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
   const norm = (s) => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -461,13 +464,23 @@
     }
   }
 
-  async function initSupabase() {
-    if (!HAS_CONFIG) { if (location.hash === '#/admin') setPage('preguntas'); showSetupBanner('local'); return; }
-    if (!window.supabase) { if (location.hash === '#/admin') setPage('preguntas'); showSetupBanner('cdn'); return; }
+  function ensureSB() {
+    if (SB) return SB;
+    if (!HAS_CONFIG || !window.supabase) return null;
     try {
       SB = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, {
         auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
       });
+    } catch (e) { console.warn('[supabase]', e); }
+    return SB;
+  }
+
+  async function initSupabase() {
+    if (!HAS_CONFIG) { if (location.hash === '#/admin') setPage('preguntas'); showSetupBanner('local'); return; }
+    if (!window.supabase) { if (location.hash === '#/admin') setPage('preguntas'); showSetupBanner('cdn'); return; }
+    try {
+      ensureSB();
+      if (!SB) throw new Error('No se pudo crear el cliente de Supabase');
       const remoteP = loadRemoteDataset();
       const overP = loadQuestionOverrides();
       const sessP = SB.auth.getSession();
@@ -1220,8 +1233,11 @@
   }
 
   function openAuth(mode) {
+    if (HAS_CONFIG && !SB) ensureSB();
     if (!HAS_CONFIG || !SB) {
-      toast('Supabase no está disponible. Revisa config.js y vendor/supabase.js (ver README).', 'err');
+      toast(HAS_CONFIG
+        ? 'No se ha podido cargar el cliente de Supabase. Recarga la página.'
+        : 'Supabase no está disponible. Revisa config.js y vendor/supabase.js (ver README).', 'err');
       return;
     }
     setAuthMode(mode || 'login');
@@ -2694,26 +2710,26 @@
 
   $('#search').oninput = e => { state.text = e.target.value; renderList(); };
 
-  $('#shuffleBtn').onclick = () => {
+  bind('#shuffleBtn', 'click', () => {
     const before = poolUnits();
     state.shuffle = before.map(unitKey).sort(() => Math.random() - 0.5);
     renderList();
     const arr = poolUnits();
     if (arr.length) goUnit(arr[0]);
-  };
-  $('#wrongOnlyBtn').onclick = () => {
+  });
+  bind('#wrongOnlyBtn', 'click', () => {
     if (state.status === 'wrong') { state.status = 'all'; renderList(); toast('Mostrando todas las preguntas', 'ok'); return; }
     state.status = 'wrong'; renderList();
     const arr = poolUnits();
     if (arr.length) { goUnit(arr[0]); closeSidebar(); }
     else openAsk({ title: 'Sin preguntas falladas', text: 'No hay preguntas falladas todavía.', okText: 'De acuerdo', info: true });
-  };
-  $('#menuBtn').onclick = () => {
+  });
+  bind('#menuBtn', 'click', () => {
     const s = $('#sidebar');
-    if (s.classList.contains('open')) closeSidebar();
+    if (s && s.classList.contains('open')) closeSidebar();
     else openSidebar();
-  };
-  $('#sidebarClose').onclick = () => closeSidebar();
+  });
+  bind('#sidebarClose', 'click', () => closeSidebar());
   window.addEventListener('resize', () => {
     if (window.innerWidth > 900) closeSidebar();
   });
@@ -2734,47 +2750,47 @@
   });
 
   // Bibliografía (página normal dentro de la app, accesible desde el menú lateral)
-  $('#bibSearch').oninput = (e) => renderBib(e.target.value);
+  bind('#bibSearch', 'input', (e) => renderBib(e.target.value));
 
   // Menú lateral: navegación entre páginas
   document.querySelectorAll('.mm-item').forEach(b => {
     if (!b.dataset.page) return;
     b.onclick = () => setPage(b.dataset.page, { push: true });
   });
-  $('#navBackdrop').onclick = () => closeSidebar();
+  bind('#navBackdrop', 'click', () => closeSidebar());
 
   // Mi cuenta (abajo en el menú): si hay sesión abre el menú de cuenta; si no, el acceso
-  $('#tbAccount').onclick = (e) => {
+  bind('#tbAccount', 'click', (e) => {
     e.stopPropagation();
     if (!session) { openAuth('login'); return; }
     const chip = $('#userChip');
     if (chip) { chip.click(); return; }
     openAuth('login');
-  };
+  });
 
   // Autenticación
   document.querySelectorAll('[data-auth]').forEach(t => {
     t.onclick = () => setAuthMode(t.dataset.auth);
   });
-  $('#authForm').onsubmit = onAuthSubmit;
-  $('#authClose').onclick = () => $('#authModal').classList.remove('open');
-  $('#forgotBtn').onclick = () => setAuthMode('recover');
-  $('#backLoginBtn').onclick = () => setAuthMode('login');
+  bind('#authForm', 'submit', onAuthSubmit);
+  bind('#authClose', 'click', () => $('#authModal').classList.remove('open'));
+  bind('#forgotBtn', 'click', () => setAuthMode('recover'));
+  bind('#backLoginBtn', 'click', () => setAuthMode('login'));
 
   // Mis bloques
-  $('#blocksClose').onclick = () => $('#blocksModal').classList.remove('open');
-  $('#blocksCancel').onclick = () => $('#blocksModal').classList.remove('open');
-  $('#blocksSubmit').onclick = saveBlocks;
-  $('#blocksModal').onclick = (e) => { if (e.target.id === 'blocksModal') $('#blocksModal').classList.remove('open'); };
+  bind('#blocksClose', 'click', () => $('#blocksModal').classList.remove('open'));
+  bind('#blocksCancel', 'click', () => $('#blocksModal').classList.remove('open'));
+  bind('#blocksSubmit', 'click', saveBlocks);
+  bind('#blocksModal', 'click', (e) => { if (e.target.id === 'blocksModal') $('#blocksModal').classList.remove('open'); });
 
   // Eliminar cuenta
-  $('#deleteClose').onclick = () => $('#deleteModal').classList.remove('open');
-  $('#deleteCancel').onclick = () => $('#deleteModal').classList.remove('open');
-  $('#deleteSubmit').onclick = deleteAccount;
-  $('#deleteModal').onclick = (e) => { if (e.target.id === 'deleteModal') $('#deleteModal').classList.remove('open'); };
+  bind('#deleteClose', 'click', () => $('#deleteModal').classList.remove('open'));
+  bind('#deleteCancel', 'click', () => $('#deleteModal').classList.remove('open'));
+  bind('#deleteSubmit', 'click', deleteAccount);
+  bind('#deleteModal', 'click', (e) => { if (e.target.id === 'deleteModal') $('#deleteModal').classList.remove('open'); });
 
   // Página principal
-  $('#homeStart').onclick = () => setPage('preguntas', { push: true });
+  bind('#homeStart', 'click', () => setPage('preguntas', { push: true }));
   const groupStartBtn = $('#homeGroupStart');
   if (groupStartBtn) groupStartBtn.onclick = () => {
     const panel = $('#homeGroup');
@@ -2788,18 +2804,18 @@
       } catch (e) { /* sin scroll */ }
     }
   };
-  $('#authModal').onclick = (e) => { if (e.target.id === 'authModal') $('#authModal').classList.remove('open'); };
+  bind('#authModal', 'click', (e) => { if (e.target.id === 'authModal') $('#authModal').classList.remove('open'); });
 
   // Modal genérico de confirmación/aviso
-  $('#askOk').onclick = () => closeAsk(true);
-  $('#askCancel').onclick = () => closeAsk(false);
-  $('#askModal').onclick = (e) => { if (e.target.id === 'askModal') closeAsk(false); };
+  bind('#askOk', 'click', () => closeAsk(true));
+  bind('#askCancel', 'click', () => closeAsk(false));
+  bind('#askModal', 'click', (e) => { if (e.target.id === 'askModal') closeAsk(false); });
 
   // Discrepancias
-  $('#disputeClose').onclick = () => $('#disputeModal').classList.remove('open');
-  $('#disputeCancel').onclick = () => $('#disputeModal').classList.remove('open');
-  $('#disputeSubmit').onclick = submitDispute;
-  $('#disputeModal').onclick = (e) => { if (e.target.id === 'disputeModal') $('#disputeModal').classList.remove('open'); };
+  bind('#disputeClose', 'click', () => $('#disputeModal').classList.remove('open'));
+  bind('#disputeCancel', 'click', () => $('#disputeModal').classList.remove('open'));
+  bind('#disputeSubmit', 'click', submitDispute);
+  bind('#disputeModal', 'click', (e) => { if (e.target.id === 'disputeModal') $('#disputeModal').classList.remove('open'); });
 
   // Administración (página normal dentro de la app)
   document.querySelectorAll('[data-admin]').forEach(t => {
@@ -2811,19 +2827,19 @@
   });
 
   // Ranking de fallos (página normal dentro de la app, accesible desde el menú lateral)
-  $('#statsBat').onchange = (e) => { statsBat = e.target.value; loadFailureStats(); };
+  bind('#statsBat', 'change', (e) => { statsBat = e.target.value; loadFailureStats(); });
 
   // Baremo de méritos
-  $('#baremoReset').onclick = () => {
+  bind('#baremoReset', 'click', () => {
     for (const k of Object.keys(brmVals)) delete brmVals[k];
     try { localStorage.removeItem(BAREMO_STORE); } catch (e) { /* sin cuota */ }
     renderBaremo();
-  };
-  $('#langBtn').addEventListener('click', () => setTimeout(renderBaremo, 0));
+  });
+  bind('#langBtn', 'click', () => setTimeout(renderBaremo, 0));
 
   // Banner de configuración
   const bannerClose = $('#bannerClose');
-  if (bannerClose) bannerClose.onclick = () => { $('#setupBanner').hidden = true; };
+  if (bannerClose) bannerClose.onclick = () => { const b = $('#setupBanner'); if (b) b.hidden = true; };
 
   // Cerrar menú de usuario al hacer clic fuera
   document.addEventListener('click', e => {
@@ -2892,13 +2908,18 @@
     if (questions[hash].caso != null) { state.view = 'case'; state.caseId = questions[hash].bat + ':' + questions[hash].caso; }
   }
   document.body.classList.toggle('page-preguntas', startPage === 'preguntas');
-  document.querySelectorAll('.tab[data-bat]').forEach(x => x.classList.toggle('on', x.dataset.bat === state.bat));
-  syncBatterySelector(allowedBats());
-  $('#subtitle').textContent = BATS[state.bat].sub;
-  renderAttemptSelect();
-  renderAll(false);
-  if (startPage !== 'preguntas' && startPage !== 'admin') setPage(startPage, { skipHash: true, render: true });
-  renderAuthUI();
-  if (window.innerWidth >= 900) { const pk = $('#asideQuestions'); if (pk) pk.open = true; }
+  try {
+    document.querySelectorAll('.tab[data-bat]').forEach(x => x.classList.toggle('on', x.dataset.bat === state.bat));
+    syncBatterySelector(allowedBats());
+    const sub = $('#subtitle');
+    if (sub) sub.textContent = BATS[state.bat].sub;
+    renderAttemptSelect();
+    renderAll(false);
+    if (startPage !== 'preguntas' && startPage !== 'admin') setPage(startPage, { skipHash: true, render: true });
+    renderAuthUI();
+    if (window.innerWidth >= 900) { const pk = $('#asideQuestions'); if (pk) pk.open = true; }
+  } catch (e) {
+    console.error('[arranque]', e);
+  }
   initSupabase();
 })();
