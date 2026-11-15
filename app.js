@@ -12,10 +12,12 @@
   const BATS = {
     comun: { data: { meta: {}, preguntas: [] }, label: 'Batería común', sub: 'Temario común · 200 preguntas' },
     fem: { data: { meta: {}, preguntas: [] }, label: 'INF Enfermedades Infecciosas', sub: 'Enfermedades Infecciosas · 500 preguntas' },
-    mi: { data: { meta: {}, preguntas: [] }, label: 'Medicina Interna', sub: 'Medicina Interna · 500 preguntas' }
+    mi: { data: { meta: {}, preguntas: [] }, label: 'Medicina Interna', sub: 'Medicina Interna · 500 preguntas' },
+    end: { data: { meta: {}, preguntas: [] }, label: 'Endocrinología y Nutrición', sub: 'Endocrinología y Nutrición · 500 preguntas' }
   };
   const BAT_KEYS = Object.keys(BATS);
-  const BAT_SHORT = { comun: 'Común', fem: 'INF', mi: 'MI' };
+  const BAT_SHORT = { comun: 'Común', fem: 'INF', mi: 'MI', end: 'END' };
+  const emptyActive = () => { const o = {}; for (const k of BAT_KEYS) o[k] = null; return o; };
 
   function rebuildDataset(raw) {
     if (raw) RAW = raw;
@@ -40,7 +42,7 @@
       c.questions.sort((a, b) => a.numero - b.numero);
       c.desde = c.questions[0].numero;
       c.hasta = c.questions[c.questions.length - 1].numero;
-      c.contexto = c.bat === 'mi'
+      c.contexto = (c.bat === 'mi' || c.bat === 'end')
         ? String(c.questions[0].contexto || '').trim()
         : cleanCaseContext(c.questions);
     }
@@ -95,6 +97,22 @@
   }
   rebuildDataset(readDatasetCache() || EMBEDDED);
 
+  // Copia local de Endocrinología (modo sin Supabase o si aún no está en la
+  // base de datos). No bloquea el arranque: si falla, la web sigue igual.
+  if (!(RAW.end && RAW.end.preguntas && RAW.end.preguntas.length)) {
+    fetch('data/endocrino.json', { cache: 'force-cache' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(b => {
+        if (!b || !Array.isArray(b.preguntas)) return;
+        if (RAW.end && RAW.end.preguntas && RAW.end.preguntas.length) return;
+        RAW.end = { meta: b.meta || {}, preguntas: b.preguntas };
+        rebuildDataset(RAW);
+        renderAttemptSelect();
+        renderAll(false);
+      })
+      .catch(() => { /* sin copia local: la batería aparecerá vacía */ });
+  }
+
   // ============================================================
   //  Utilidades
   // ============================================================
@@ -139,6 +157,7 @@
     if (q.caso != null) return 'Casos clínicos';
     if (q.bat === 'fem') return 'INF · general';
     if (q.bat === 'mi') return 'MI · general';
+    if (q.bat === 'end') return 'END · general';
     return 'General';
   }
 
@@ -153,7 +172,7 @@
     : 'g-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 
   function emptyStore() {
-    return { v: 2, owner: null, groups: [], active: { comun: null, fem: null, mi: null } };
+    return { v: 2, owner: null, groups: [], active: emptyActive() };
   }
 
   function migrateLegacyStore(s) {
@@ -186,7 +205,7 @@
     if (s && s.v === 2 && Array.isArray(s.groups)) store = s;
     else if (s && s.answers) store = migrateLegacyStore(s);
   } catch (e) { /* almacenamiento no disponible */ }
-  if (!store.active) store.active = { comun: null, fem: null, mi: null };
+  if (!store.active) store.active = emptyActive();
   for (const b of BAT_KEYS) if (!(b in store.active)) store.active[b] = null;
   if (!Array.isArray(store.groups)) store.groups = [];
   const save = () => { try { localStorage.setItem(LS, JSON.stringify(store)); } catch (e) { /* almacenamiento no disponible */ } };
@@ -280,6 +299,12 @@
   let confirmStats = {};   // question_uid -> { confirms, disputes, confirmers, last_at }
   let myConf = {};         // question_uid -> fila de confirmación del usuario
   let overrides = {};      // question_uid -> { answer, previous_answer }
+  let notes = {};          // question_uid -> { body, shared, updated_at }
+  let groupNotes = {};     // question_uid -> [{ name, body, updated_at }]
+  let myGroups = [];       // grupos de estudio del usuario
+  let activeGroupId = null;
+  let noteTimer = null;
+  notes = readLocalNotes();
   let authMode = 'login';
   let autoHome = false;
   let disputeUid = null;
@@ -404,6 +429,22 @@
           tema_id: r.tema_id
         });
       }
+      // Copia local de la batería de Endocrinología mientras no esté cargada
+      // en Supabase (data/endocrino.json). Si ya existe en la base de datos,
+      // se usa la de Supabase y no se descarga nada.
+      if (!remote.end || !(remote.end.preguntas || []).length) {
+        try {
+          const res = await fetch('data/endocrino.json', { cache: 'force-cache' });
+          if (res.ok) {
+            const bundle = await res.json();
+            if (bundle && Array.isArray(bundle.preguntas) && bundle.preguntas.length) {
+              remote.end = { meta: bundle.meta || {}, preguntas: bundle.preguntas };
+            }
+          }
+        } catch (e) {
+          console.warn('[dataset] Sin copia local de Endocrinología:', e.message || e);
+        }
+      }
       remote.fuentes = (bibRes.data || []).map(r =>
         Object.assign({}, r.data || {}, { id: r.id, grupo: r.grupo || (r.data || {}).grupo })
       );
@@ -466,16 +507,24 @@
     profile = null;
     myConf = {};
     if (!session) {
-      await loadConfirmationStats();
+      await Promise.all([loadConfirmationStats(), loadNotes()]);
+      myGroups = [];
+      activeGroupId = null;
+      groupNotes = {};
       renderAuthUI();
       applyBlockVisibility();
+      renderGroupChip();
+      renderHomeGroup();
       renderAll(false);
       if (location.hash === '#/admin') routeFromHash();
       return;
     }
-    await Promise.all([loadProfile(), loadConfirmationStats(), loadMyConfirmations(), syncAttempts()]);
+    await Promise.all([loadProfile(), loadConfirmationStats(), loadMyConfirmations(), syncAttempts(), loadNotes(), loadMyGroups()]);
+    await loadGroupNotes();
     renderAuthUI();
     applyBlockVisibility();
+    renderGroupChip();
+    renderHomeGroup();
     renderAll(false);
     if (location.hash === '#/admin') routeFromHash();
   }
@@ -524,6 +573,158 @@
       for (const r of data || []) map[r.question_uid] = r;
       myConf = map;
     } catch (e) { console.warn('[mis confirmaciones]', e); }
+  }
+
+  // ============================================================
+  //  Anotaciones por pregunta (privadas, opcionalmente para el grupo)
+  // ============================================================
+  const NOTES_LS = 'ope-notes-v1';
+  function readLocalNotes() {
+    try { return JSON.parse(localStorage.getItem(NOTES_LS) || '{}') || {}; } catch (e) { return {}; }
+  }
+  function writeLocalNotes(map) {
+    try { localStorage.setItem(NOTES_LS, JSON.stringify(map)); } catch (e) { /* cuota llena */ }
+  }
+  function noteOf(uid) { return notes[uid] || null; }
+
+  async function loadNotes() {
+    if (!SB || !session) {
+      notes = readLocalNotes();
+      groupNotes = {};
+      return;
+    }
+    try {
+      const { data, error } = await SB.from('question_notes')
+        .select('question_uid,body,shared,updated_at')
+        .eq('user_id', session.user.id);
+      if (error) { console.warn('[anotaciones]', error.message); notes = readLocalNotes(); return; }
+      const map = {};
+      for (const r of data || []) map[r.question_uid] = r;
+      // Subir las notas que el usuario escribió sin sesión.
+      const local = readLocalNotes();
+      const pending = Object.entries(local).filter(([uid, n]) => n && n.body && !map[uid]);
+      if (pending.length) {
+        const rows = pending.map(([uid, n]) => ({
+          user_id: session.user.id,
+          question_uid: uid,
+          body: String(n.body).slice(0, 4000),
+          shared: !!n.shared
+        }));
+        const { error: e2 } = await SB.from('question_notes').upsert(rows, { onConflict: 'user_id,question_uid' });
+        if (!e2) {
+          for (const [uid, n] of pending) map[uid] = n;
+        }
+      }
+      notes = map;
+    } catch (e) { console.warn('[anotaciones]', e); notes = readLocalNotes(); }
+  }
+
+  async function loadGroupNotes() {
+    if (!SB || !session) { groupNotes = {}; return; }
+    try {
+      const { data, error } = await SB.rpc('group_question_notes');
+      if (error) { console.warn('[anotaciones de grupo]', error.message); return; }
+      const map = {};
+      for (const r of data || []) {
+        (map[r.question_uid] = map[r.question_uid] || []).push(r);
+      }
+      groupNotes = map;
+    } catch (e) { console.warn('[anotaciones de grupo]', e); }
+  }
+
+  async function saveNote(uid, body, shared) {
+    const clean = String(body || '').trim().slice(0, 4000);
+    if (!clean) return deleteNote(uid);
+    if (!SB || !session) {
+      const map = readLocalNotes();
+      map[uid] = { body: clean, shared: !!shared, updated_at: new Date().toISOString() };
+      writeLocalNotes(map);
+      notes = map;
+      return { local: true };
+    }
+    const { error } = await SB.from('question_notes').upsert({
+      user_id: session.user.id,
+      question_uid: uid,
+      body: clean,
+      shared: !!shared
+    }, { onConflict: 'user_id,question_uid' });
+    if (error) throw error;
+    notes[uid] = { body: clean, shared: !!shared, updated_at: new Date().toISOString() };
+    await loadGroupNotes();
+    return { local: false };
+  }
+
+  async function deleteNote(uid) {
+    if (!SB || !session) {
+      const map = readLocalNotes();
+      delete map[uid];
+      writeLocalNotes(map);
+      notes = map;
+    } else {
+      const { error } = await SB.from('question_notes').delete()
+        .eq('user_id', session.user.id).eq('question_uid', uid);
+      if (error) throw error;
+      delete notes[uid];
+      await loadGroupNotes();
+    }
+  }
+
+  // ============================================================
+  //  Grupos de estudio
+  // ============================================================
+  const GROUP_LS = 'ope-study-group';
+  function currentStudyGroup() {
+    return myGroups.find(g => g.id === activeGroupId) || myGroups[0] || null;
+  }
+
+  async function loadMyGroups() {
+    if (!SB || !session) { myGroups = []; activeGroupId = null; return; }
+    try {
+      const { data, error } = await SB.rpc('my_study_groups');
+      if (error) { console.warn('[grupos]', error.message); return; }
+      myGroups = data || [];
+      try { activeGroupId = localStorage.getItem(GROUP_LS) || null; } catch (e) { activeGroupId = null; }
+      if (activeGroupId && !myGroups.some(g => g.id === activeGroupId)) activeGroupId = null;
+    } catch (e) { console.warn('[grupos]', e); }
+  }
+
+  async function createStudyGroup(name) {
+    if (!SB || !session) throw new Error('Inicia sesión para crear un grupo.');
+    const { data, error } = await SB.rpc('create_study_group', { p_name: name });
+    if (error) throw error;
+    await loadMyGroups();
+    activeGroupId = data && data.id ? data.id : null;
+    try { if (activeGroupId) localStorage.setItem(GROUP_LS, activeGroupId); } catch (e) { /* sin almacenamiento */ }
+    return data;
+  }
+
+  async function joinStudyGroup(code) {
+    if (!SB || !session) throw new Error('Inicia sesión para unirte a un grupo.');
+    const { data, error } = await SB.rpc('join_study_group', { p_code: code });
+    if (error) throw error;
+    await loadMyGroups();
+    activeGroupId = data && data.id ? data.id : null;
+    try { if (activeGroupId) localStorage.setItem(GROUP_LS, activeGroupId); } catch (e) { /* sin almacenamiento */ }
+    return data;
+  }
+
+  async function leaveStudyGroup(id) {
+    if (!SB || !session) return;
+    const { error } = await SB.from('study_group_members').delete()
+      .eq('group_id', id).eq('user_id', session.user.id);
+    if (error) throw error;
+    if (activeGroupId === id) activeGroupId = null;
+    try { localStorage.removeItem(GROUP_LS); } catch (e) { /* sin almacenamiento */ }
+    await loadMyGroups();
+  }
+
+  async function setActiveStudyGroup(id) {
+    activeGroupId = id;
+    try { if (id) localStorage.setItem(GROUP_LS, id); else localStorage.removeItem(GROUP_LS); } catch (e) { /* sin almacenamiento */ }
+    await Promise.all([loadConfirmationStats(), loadGroupNotes()]);
+    renderGroupChip();
+    renderHomeGroup();
+    renderAll(true);
   }
 
   // ------------------------------------------------------------
@@ -611,7 +812,7 @@
       // pertenecen al último usuario que inició sesión.
       if (store.owner && store.owner !== session.user.id) {
         store.groups = [];
-        store.active = { comun: null, fem: null, mi: null };
+        store.active = emptyActive();
         save();
       }
       store.owner = session.user.id;
@@ -891,10 +1092,10 @@
       $('#logoutBtn').onclick = async () => {
         $('#userMenu').hidden = true;
         if (SB) await SB.auth.signOut();
-        session = null; profile = null; myConf = {}; confirmStats = {};
+        session = null; profile = null; myConf = {}; confirmStats = {}; notes = {}; groupNotes = {}; myGroups = []; activeGroupId = null;
         // No dejar intentos del usuario anterior en el navegador.
         store.groups = [];
-        store.active = { comun: null, fem: null, mi: null };
+        store.active = emptyActive();
         store.owner = null;
         state.reviewGroupId = null;
         applyBlockVisibility();
@@ -977,9 +1178,9 @@
     btn.disabled = false;
     if (error) { $('#deleteMsg').textContent = 'No se pudo eliminar la cuenta: ' + error.message; return; }
     try { await SB.auth.signOut(); } catch (e) { /* la sesión ya no es válida */ }
-    session = null; profile = null; myConf = {}; confirmStats = {};
+    session = null; profile = null; myConf = {}; confirmStats = {}; notes = {}; groupNotes = {}; myGroups = []; activeGroupId = null;
     store.groups = [];
-    store.active = { comun: null, fem: null, mi: null };
+    store.active = emptyActive();
     store.owner = null;
     state.reviewGroupId = null;
     save();
@@ -1172,16 +1373,20 @@
     const n = st.confirms || 0;
     const d = st.disputes || 0;
     const mine = myConf[q.uid];
+    const names = Array.isArray(st.confirmers) ? st.confirmers.filter(Boolean) : [];
     let html = '';
     if (n > 0) {
-      html += `<span class="tag conf-ok" title="${esc(`Confirmada por ${n} usuario(s)`)}">&#10003; Confirmada por ${n} usuario${n === 1 ? '' : 's'}</span>`;
+      const onlyMe = mine && mine.is_correct && n === 1;
+      const who = names.length ? ` (${names.join(', ')})` : '';
+      const label = onlyMe ? '&#10003; Confirmada por ti' : `&#10003; Confirmada por ${n} usuario${n === 1 ? '' : 's'}`;
+      html += `<span class="tag conf-ok" title="${esc((onlyMe ? 'Tu confirmación' : 'Confirmada por' + who))}">${label}</span>`;
     } else {
       html += '<span class="tag conf-none">Sin confirmar</span>';
     }
     if (d > 0) {
       html += `<span class="tag conf-bad" title="${esc(d + ' usuario(s) creen que la respuesta es incorrecta')}">&#9888; ${d} en desacuerdo</span>`;
     }
-    if (mine && mine.is_correct) html += '<span class="tag conf-me">Tu confirmación</span>';
+    if (mine && mine.is_correct && n > 1) html += '<span class="tag conf-me">Tu confirmación</span>';
     return html;
   }
 
@@ -1207,7 +1412,9 @@
         <button class="btn ghost" type="button" data-unconfirm="${q.uid}">Retirar</button>
       </div>`;
     }
-    const count = st.confirms ? `<span class="confirm-count">${st.confirms} confirmación${st.confirms === 1 ? '' : 'es'} de otros usuarios</span>` : '';
+    const count = st.confirms
+      ? `<span class="confirm-count">${st.confirms} confirmación${st.confirms === 1 ? '' : 'es'} tuya${st.confirms === 1 ? '' : 's'} o de tu grupo</span>`
+      : '';
     return `<div class="confirm-row">
       <button class="btn confirm" type="button" data-confirm="${q.uid}">&#10003; Confirmar respuesta correcta</button>
       <button class="btn ghost" type="button" data-dispute="${q.uid}">No es correcta</button>
@@ -1410,8 +1617,65 @@
     </div>`;
   }
 
-  function questionHtml(q, opts) {
-    opts = opts || {};
+  function confCommentsHtml(q) {
+    const st = confirmStats[q.uid] || {};
+    const list = Array.isArray(st.comments) ? st.comments : [];
+    if (!list.length) return '';
+    return `<div class="notes-group"><b>Comentarios del grupo</b>${list.map(c => {
+      const ans = c.answer ? `<b>${esc(c.answer)})</b> ` : '';
+      return `<div class="note-group-item"><span class="note-author">${esc(c.name || 'Usuario')}</span>
+        <span class="note-date">${esc(fmtDate(c.at))}</span>
+        <div class="note-body">${ans}${esc(c.comment || '')}</div></div>`;
+    }).join('')}</div>`;
+  }
+
+  function notesHtml(q) {
+    const n = noteOf(q.uid) || {};
+    const shared = groupNotes[q.uid] || [];
+    const groupBlock = shared.length
+      ? `<div class="notes-group"><b>Comentarios del grupo</b>${shared.map(c =>
+          `<div class="note-group-item"><span class="note-author">${esc(c.name || 'Usuario')}</span>
+            <span class="note-date">${esc(fmtDate(c.updated_at))}</span>
+            <div class="note-body">${esc(c.body)}</div></div>`).join('')}</div>`
+      : '';
+    return `<div class="notes-box" data-note-box="${q.uid}">
+      <div class="notes-head"><b>Mis anotaciones</b><span class="notes-state" data-note-state>${n.body ? 'Guardadas' : 'Sin anotaciones'}</span></div>
+      <textarea class="notes-input" data-note-input="${q.uid}" rows="3" placeholder="Escribe aquí tus anotaciones para esta pregunta. Solo las ves tú.">${esc(n.body || '')}</textarea>
+      <div class="notes-actions">
+        <label class="notes-share"><input type="checkbox" data-note-share="${q.uid}" ${n.shared ? 'checked' : ''} ${session ? '' : 'disabled'}> Compartir con mi grupo</label>
+        <button class="btn" type="button" data-note-save="${q.uid}">Guardar</button>
+        <button class="btn ghost" type="button" data-note-del="${q.uid}" ${n.body ? '' : 'hidden'}>Borrar</button>
+      </div>
+      ${session && !currentStudyGroup() ? '<div class="notes-hint">Las anotaciones son privadas. Crea o únete a un grupo para compartirlas.</div>' : ''}
+      ${groupBlock}
+    </div>`;
+  }
+
+  async function persistNote(uid) {
+    const box = document.querySelector(`[data-note-box="${uid}"]`);
+    if (!box) return;
+    const input = box.querySelector('[data-note-input]');
+    const share = box.querySelector('[data-note-share]');
+    const state = box.querySelector('[data-note-state]');
+    const del = box.querySelector('[data-note-del]');
+    const body = input ? input.value : '';
+    try {
+      if (!String(body).trim()) {
+        await deleteNote(uid);
+        if (state) state.textContent = 'Sin anotaciones';
+        if (del) del.hidden = true;
+        return;
+      }
+      await saveNote(uid, body, share ? share.checked : false);
+      if (state) state.textContent = 'Guardadas ' + new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+      if (del) del.hidden = false;
+    } catch (e) {
+      if (state) state.textContent = 'No se pudo guardar';
+      toast('No se pudo guardar la anotación: ' + (e.message || e), 'err');
+    }
+  }
+
+  function questionHtml(q, opts) {    opts = opts || {};
     const a = viewAnswers()[q.uid];
     const review = !!reviewGroup();
     const entries = Object.entries(q.opciones || {});
@@ -1458,6 +1722,8 @@
       html += '<div class="notes">Esta pregunta no se respondió en este intento.</div>';
     }
     if (!review && q.answer) html += confirmRow(q);
+    html += confCommentsHtml(q);
+    html += notesHtml(q);
     return html;
   }
 
@@ -1547,6 +1813,36 @@
     card.querySelectorAll('[data-dispute]').forEach(b => { b.onclick = () => openDispute(b.dataset.dispute); });
     card.querySelectorAll('[data-unconfirm]').forEach(b => { b.onclick = () => withdrawConfirmation(b.dataset.unconfirm); });
     card.querySelectorAll('[data-auth-open]').forEach(b => { b.onclick = () => openAuth(); });
+    card.querySelectorAll('[data-note-save]').forEach(b => { b.onclick = () => persistNote(b.dataset.noteSave); });
+    card.querySelectorAll('[data-note-del]').forEach(b => {
+      b.onclick = async () => {
+        const uid = b.dataset.noteDel;
+        try {
+          await deleteNote(uid);
+          const box = document.querySelector(`[data-note-box="${uid}"]`);
+          if (box) {
+            const input = box.querySelector('[data-note-input]');
+            if (input) input.value = '';
+            const state = box.querySelector('[data-note-state]');
+            if (state) state.textContent = 'Sin anotaciones';
+          }
+          b.hidden = true;
+        } catch (e) { toast('No se pudo borrar: ' + (e.message || e), 'err'); }
+      };
+    });
+    card.querySelectorAll('[data-note-input]').forEach(t => {
+      t.onblur = () => {
+        const uid = t.dataset.noteInput;
+        const current = (noteOf(uid) || {}).body || '';
+        if (String(t.value).trim() !== String(current).trim()) persistNote(uid);
+      };
+    });
+    card.querySelectorAll('[data-note-share]').forEach(c => {
+      c.onchange = () => {
+        if (!session) return;
+        persistNote(c.dataset.noteShare);
+      };
+    });
     const exitBtn = $('#exitReviewBtn');
     if (exitBtn) exitBtn.onclick = () => exitReview();
     card.querySelectorAll('[data-copy-case]').forEach(b => {
@@ -1586,6 +1882,114 @@
     const guest = !session && HAS_CONFIG;
     $('#homeSignup').hidden = !guest;
     $('#homeLogin').hidden = !guest;
+    renderGroupChip();
+    renderHomeGroup();
+  }
+
+  function renderGroupChip() {
+    const chip = $('#groupChip');
+    if (!chip) return;
+    const g = session ? currentStudyGroup() : null;
+    if (!g) { chip.hidden = true; chip.textContent = ''; return; }
+    chip.hidden = false;
+    chip.innerHTML = '&#128101; ' + esc(g.name);
+    chip.title = 'Grupo activo · código ' + g.code;
+    chip.onclick = () => setPage('inicio', { push: true });
+  }
+
+  function renderHomeGroup() {
+    const box = $('#homeGroupBody');
+    if (!box) return;
+    if (!HAS_CONFIG) {
+      box.innerHTML = '<div class="notes">Los grupos de estudio necesitan Supabase. La web está en modo local, así que solo puedes estudiar de forma individual (con tus anotaciones guardadas en este navegador).</div>';
+      return;
+    }
+    if (!session) {
+      box.innerHTML = `<div class="notes">Inicia sesión para crear un grupo o unirte a uno con un código de invitación. En grupo, todos veis las confirmaciones y los comentarios que compartáis.</div>
+        <button class="btn primary" id="groupLoginBtn" type="button">Iniciar sesión</button>`;
+      const b = $('#groupLoginBtn');
+      if (b) b.onclick = () => openAuth('login');
+      return;
+    }
+    const active = currentStudyGroup();
+    const list = myGroups.length
+      ? myGroups.map(g => `<button class="gitem${active && active.id === g.id ? ' on' : ''}" type="button" data-group-active="${g.id}">
+          <span class="gname">${esc(g.name)}${g.is_owner ? ' <span class="gowner">admin</span>' : ''}</span>
+          <span class="gmeta">${g.members} miembro${g.members === 1 ? '' : 's'} · código <b>${esc(g.code)}</b></span>
+        </button>`).join('')
+      : '<div class="notes">Todavía no tienes grupos. Crea uno e invita a quien quieras con el código.</div>';
+    box.innerHTML = `<div class="glist">${list}</div>
+      <div class="gforms">
+        <div class="gform">
+          <label for="groupNewName">Crear un grupo</label>
+          <div class="grow"><input id="groupNewName" maxlength="60" placeholder="Nombre del grupo"><button class="btn primary" id="groupCreateBtn" type="button">Crear grupo</button></div>
+        </div>
+        <div class="gform">
+          <label for="groupJoinCode">Aceptar una invitación</label>
+          <div class="grow"><input id="groupJoinCode" maxlength="12" placeholder="Código de invitación"><button class="btn" id="groupJoinBtn" type="button">Unirme</button></div>
+        </div>
+      </div>
+      <div class="auth-msg" id="groupMsg"></div>
+      <div class="group-actions">
+        ${active ? `<button class="btn ghost" id="groupLeaveBtn" type="button">Salir de «${esc(active.name)}»</button>` : ''}
+        <button class="btn" id="groupHomePractice" type="button">Empezar a practicar</button>
+      </div>`;
+
+    box.querySelectorAll('[data-group-active]').forEach(b => {
+      b.onclick = () => setActiveStudyGroup(b.dataset.groupActive);
+    });
+    const msg = (text, cls) => { const n = $('#groupMsg'); if (n) { n.textContent = text; n.className = 'auth-msg' + (cls ? ' ' + cls : ''); } };
+    const createBtn = $('#groupCreateBtn');
+    if (createBtn) createBtn.onclick = async () => {
+      const name = ($('#groupNewName').value || '').trim();
+      if (name.length < 2) { msg('Escribe un nombre de al menos 2 caracteres.', 'err'); return; }
+      createBtn.disabled = true;
+      try {
+        const g = await createStudyGroup(name);
+        await Promise.all([loadConfirmationStats(), loadGroupNotes()]);
+        renderGroupChip();
+        renderHomeGroup();
+        renderAll(true);
+        msg('Grupo «' + g.name + '» creado. Código de invitación: ' + g.code + '. Compártelo con quien quieras.', 'ok');
+        toast('Grupo creado · código ' + g.code, 'ok');
+      } catch (e) {
+        msg('No se pudo crear el grupo: ' + (e.message || e), 'err');
+        createBtn.disabled = false;
+      }
+    };
+    const joinBtn = $('#groupJoinBtn');
+    if (joinBtn) joinBtn.onclick = async () => {
+      const code = ($('#groupJoinCode').value || '').trim();
+      if (!code) { msg('Escribe el código de invitación.', 'err'); return; }
+      joinBtn.disabled = true;
+      try {
+        const g = await joinStudyGroup(code);
+        await Promise.all([loadConfirmationStats(), loadGroupNotes()]);
+        renderGroupChip();
+        renderHomeGroup();
+        renderAll(true);
+        msg('Te has unido a «' + g.name + '».', 'ok');
+      } catch (e) {
+        msg('No se pudo unir: ' + (e.message || e), 'err');
+        joinBtn.disabled = false;
+      }
+    };
+    const leaveBtn = $('#groupLeaveBtn');
+    if (leaveBtn) leaveBtn.onclick = async () => {
+      const g = currentStudyGroup();
+      if (!g) return;
+      const ok = await openAsk({ title: 'Salir del grupo', text: '¿Salir de «' + g.name + '»? Dejarás de ver sus confirmaciones y comentarios.', okText: 'Salir', danger: true });
+      if (!ok) return;
+      try {
+        await leaveStudyGroup(g.id);
+        await loadConfirmationStats();
+        renderGroupChip();
+        renderHomeGroup();
+        renderAll(true);
+      } catch (e) { msg('No se pudo salir del grupo: ' + (e.message || e), 'err'); }
+    };
+    const practice = $('#groupHomePractice');
+    if (practice) practice.onclick = () => setPage('preguntas', { push: true });
   }
 
   function renderCrumbs() {
@@ -1972,7 +2376,7 @@
       const q = questions[r.question_uid];
       if (!q) return;
       const rate = Number(r.failure_rate) || 0;
-      const batLabel = q.bat === 'comun' ? 'Común' : q.bat === 'mi' ? 'MI' : 'INF';
+      const batLabel = BAT_SHORT[q.bat] || q.bat;
       const caseLabel = q.caso != null ? ` &middot; Caso ${q.caso}` : '';
       const width = Math.max(4, Math.round(r.failures * 100 / maxFail));
       const text = q.pregunta.length > 160 ? q.pregunta.slice(0, 160) + '…' : q.pregunta;
@@ -2040,7 +2444,12 @@
   function renderBib(text) {
     const t = norm(text || '');
     const arr = FUENTES.filter(f => !t || norm(f.titulo + ' ' + (f.ref || '')).includes(t));
-    const groups = { comun: 'Temario común', fem: 'Temario específico (INF Enfermedades Infecciosas)', mi: 'Temario específico (Medicina Interna)' };
+    const groups = {
+      comun: 'Temario común',
+      fem: 'Temario específico (INF Enfermedades Infecciosas)',
+      mi: 'Temario específico (Medicina Interna)',
+      end: 'Temario específico (Endocrinología y Nutrición)'
+    };
     let html = '';
     for (const g of BAT_KEYS) {
       const items = arr.filter(f => f.grupo === g);
@@ -2337,6 +2746,16 @@
 
   // Página principal
   $('#homeStart').onclick = () => setPage('preguntas', { push: true });
+  const groupStartBtn = $('#homeGroupStart');
+  if (groupStartBtn) groupStartBtn.onclick = () => {
+    const panel = $('#homeGroup');
+    if (!panel) return;
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) {
+      renderHomeGroup();
+      try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { /* sin scroll */ }
+    }
+  };
   $('#homeSignup').onclick = () => openAuth('signup');
   $('#homeLogin').onclick = () => openAuth('login');
   $('#authModal').onclick = (e) => { if (e.target.id === 'authModal') $('#authModal').classList.remove('open'); };

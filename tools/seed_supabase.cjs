@@ -40,7 +40,7 @@ const bodyStart = html.indexOf('>', start) + 1;
 const bodyEnd = html.indexOf('</script>', bodyStart);
 const data = JSON.parse(html.slice(bodyStart, bodyEnd));
 
-const BATTERIES = ['comun', 'fem', 'mi'];
+const BATTERIES = ['comun', 'fem', 'mi', 'end'];
 const batteries = BATTERIES.map(id => ({ id, meta: data[id].meta || {} }));
 const questions = [];
 for (const bat of BATTERIES) {

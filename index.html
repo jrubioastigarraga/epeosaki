@@ -519,6 +519,35 @@ details#asideQuestions{border:0;border-radius:var(--radius);box-shadow:var(--sha
 .brm-note a{color:var(--accent)}
 .brm-sub{font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:12px 0 2px}
 
+/* Anotaciones por pregunta y grupos de estudio */
+.notes-box{margin-top:14px;border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--panel)}
+.notes-head{display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:8px;gap:8px}
+.notes-state{font-size:12px;color:var(--muted)}
+.notes-input{width:100%;min-height:74px;resize:vertical;border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit;font-size:14px;background:var(--bg);color:inherit}
+.notes-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.notes-share{font-size:12.5px;color:var(--muted);display:flex;gap:6px;align-items:center;margin-right:auto}
+.notes-hint{font-size:12px;color:var(--muted);margin-top:6px}
+.notes-group{margin-top:12px;border-top:1px dashed var(--line);padding-top:10px;font-size:13px}
+.note-group-item{margin-top:8px}
+.note-author{font-weight:700;font-size:12.5px}
+.note-date{font-size:11.5px;color:var(--muted);margin-left:6px}
+.note-body{white-space:pre-wrap}
+.home-group{margin-top:16px;border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--panel)}
+.home-group h3{margin:0 0 6px;font-size:16px}
+.home-group-lead{font-size:13px;color:var(--muted);margin:0 0 12px}
+.glist{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.gitem{text-align:left;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:10px 12px;cursor:pointer;color:inherit}
+.gitem.on{border-color:var(--accent);background:var(--accent-soft)}
+.gname{display:block;font-weight:700;font-size:14px}
+.gowner{font-size:10.5px;background:var(--accent-soft);color:var(--accent);border-radius:6px;padding:1px 6px;margin-left:4px}
+.gmeta{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.gforms{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.gform label{font-size:12.5px;color:var(--muted);display:block;margin-bottom:4px}
+.grow{display:flex;gap:8px}
+.grow input{flex:1;min-width:0}
+.group-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.groupchip{background:var(--accent-soft);color:var(--accent);border-color:transparent;font-size:12px;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
 /* Móvil: cabecera de una sola línea (título, idioma y avatar con la inicial) */
 @media (max-width:899px){
   header{flex-wrap:nowrap;position:sticky;padding:calc(6px + env(safe-area-inset-top)) 14px 6px}
@@ -533,6 +562,7 @@ details#asideQuestions{border:0;border-radius:var(--radius);box-shadow:var(--sha
   .userchip{padding:2px}
   .avatar{width:26px;height:26px;font-size:11px}
   #langBtn{padding:5px 9px}
+  .groupchip{display:none}
 }
 </style>
 </head>
@@ -551,6 +581,7 @@ details#asideQuestions{border:0;border-radius:var(--radius);box-shadow:var(--sha
       <div class="stat"><b id="statOK">0%</b><span>aciertos</span></div>
       <div class="progress"><i id="bar"></i></div>
       <button class="btn" id="langBtn" type="button" title="Cambiar idioma">ES</button>
+      <button class="btn groupchip" id="groupChip" type="button" hidden></button>
       <div class="authbox" id="authBox"></div>
       <button class="iconbtn mobile-only" id="menuBtn" title="Menú" aria-label="Abrir menú">&#9776;</button>
     </div>
@@ -587,9 +618,15 @@ details#asideQuestions{border:0;border-radius:var(--radius);box-shadow:var(--sha
           <h2>Practica tipo test para la oposición de Osakidetza</h2>
           <p class="home-lead">epeosaki es una herramienta de práctica con preguntas tipo test, casos clínicos y la referencia exacta de la bibliografía donde está cada respuesta.</p>
           <div class="home-cta">
-            <button class="btn primary" id="homeStart" type="button">Empezar a practicar</button>
+            <button class="btn primary" id="homeStart" type="button">Estudiar solo/a</button>
+            <button class="btn" id="homeGroupStart" type="button">Estudiar en grupo</button>
             <button class="btn" id="homeSignup" type="button">Crear cuenta</button>
             <button class="btn" id="homeLogin" type="button">Iniciar sesión</button>
+          </div>
+          <div class="home-group" id="homeGroup" hidden>
+            <h3>Estudiar en grupo</h3>
+            <p class="home-group-lead">Crea un grupo y comparte su código de invitación. Los miembros del grupo veis juntos vuestras confirmaciones y los comentarios que decidáis compartir. Cada persona mantiene sus propias anotaciones privadas.</p>
+            <div id="homeGroupBody"></div>
           </div>
           <div class="home-grid">
             <div class="home-box">
@@ -618,6 +655,7 @@ details#asideQuestions{border:0;border-radius:var(--radius);box-shadow:var(--sha
             <button class="tab on" data-bat="comun">Común 200</button>
             <button class="tab" data-bat="fem">INF 500</button>
             <button class="tab" data-bat="mi">MI 500</button>
+            <button class="tab" data-bat="end">END 500</button>
           </div>
           <div class="search">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
@@ -670,6 +708,7 @@ details#asideQuestions{border:0;border-radius:var(--radius);box-shadow:var(--sha
               <option value="comun">Común</option>
               <option value="fem">INF</option>
               <option value="mi">MI</option>
+              <option value="end">END</option>
             </select>
           </div>
         </div>
@@ -764,6 +803,7 @@ details#asideQuestions{border:0;border-radius:var(--radius);box-shadow:var(--sha
           <label class="block-opt"><input type="checkbox" name="signupBlock" value="comun" checked><span>Batería común · 200 preguntas</span></label>
           <label class="block-opt"><input type="checkbox" name="signupBlock" value="fem" checked><span>INF Enfermedades Infecciosas · 500 preguntas</span></label>
           <label class="block-opt"><input type="checkbox" name="signupBlock" value="mi" checked><span>Medicina Interna · 500 preguntas</span></label>
+          <label class="block-opt"><input type="checkbox" name="signupBlock" value="end" checked><span>Endocrinología y Nutrición · 500 preguntas</span></label>
           <small>Puedes cambiarlos en cualquier momento desde <b>Mis bloques</b>. Si no marcas ninguno, se muestran todos.</small>
         </fieldset>
         <label class="terms-check" id="termsField" hidden>
@@ -872,6 +912,7 @@ details#asideQuestions{border:0;border-radius:var(--radius);box-shadow:var(--sha
         <label class="block-opt"><input type="checkbox" name="blockopt" value="comun"><span>Batería común · 200 preguntas</span></label>
         <label class="block-opt"><input type="checkbox" name="blockopt" value="fem"><span>INF Enfermedades Infecciosas · 500 preguntas</span></label>
         <label class="block-opt"><input type="checkbox" name="blockopt" value="mi"><span>Medicina Interna · 500 preguntas</span></label>
+        <label class="block-opt"><input type="checkbox" name="blockopt" value="end"><span>Endocrinología y Nutrición · 500 preguntas</span></label>
       </div>
       <div class="auth-msg" id="blocksMsg"></div>
       <div class="modal-actions">

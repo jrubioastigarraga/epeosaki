@@ -1,6 +1,6 @@
 # epeosaki — práctica de preguntas OPE Osakidetza
 
-Sitio estático (GitHub Pages) con 1.200 preguntas tipo test. Las preguntas, opciones, respuestas y bibliografía se guardan en **Supabase**; `index.html` conserva una copia embebida como respaldo por si falla la conexión.
+Sitio estático (GitHub Pages) con 1.700 preguntas tipo test. Las preguntas, opciones, respuestas y bibliografía se guardan en **Supabase**; `index.html` conserva una copia embebida como respaldo por si falla la conexión.
 
 - **Batería común**: 200 preguntas (temario normativo).
 - **INF Enfermedades Infecciosas**: 500 preguntas.
@@ -8,12 +8,17 @@ Sitio estático (GitHub Pages) con 1.200 preguntas tipo test. Las preguntas, opc
 - **Medicina Interna**: 500 preguntas.
   - Preguntas **451–500** agrupadas en **13 casos clínicos**. Al abrir un caso se muestran de una vez todas sus preguntas.
   - Incluye 2 preguntas defectuosas sin respuesta válida, marcadas para revisión.
+- **Endocrinología y Nutrición**: 500 preguntas.
+  - Preguntas **451–500** agrupadas en **8 casos clínicos**. Al abrir un caso se muestran de una vez todas sus preguntas.
+  - Respuestas generadas con IA (campo `confidence`); las de confianza baja llevan una nota para revisarlas.
 
 Además, la aplicación se conecta a **Supabase** para tener:
 
 - Registro e inicio de sesión con email y contraseña.
 - Usuarios **normales** y usuarios **administradores**.
-- **Confirmación de respuestas** por parte de los usuarios (y aviso de discrepancias).
+- **Confirmación de respuestas privada**: cada usuario solo ve sus propias confirmaciones; si pertenece a un grupo de estudio, ve también las de los miembros de ese grupo.
+- **Anotaciones por pregunta y por usuario**: privadas, con la opción de compartirlas con el grupo.
+- **Grupos de estudio**: un usuario crea el grupo (con nombre y código de invitación) y los demás se unen con ese código. Todos los miembros ven las confirmaciones y los comentarios compartidos.
 - **Intentos agrupados**: cada intento guarda las preguntas que hayas respondido, aunque no completes todas. Puedes revisar cualquier intento pasado desde el selector de la barra lateral.
 - **Akatsak**: ranking con tus propios fallos (requiere iniciar sesión).
 - **Baremo**: calculadora de méritos del Anexo III de la Resolución 1679/2026 (médico/a familia-EAP, BOPV 30-10-2026); se guarda en el navegador.
@@ -62,6 +67,14 @@ Además, la aplicación se conecta a **Supabase** para tener:
 > Para que cada usuario elija sus bloques (y cambiarlos desde **Mis bloques**), ejecuta [`sql/migrate_user_blocks.sql`](sql/migrate_user_blocks.sql). Los usuarios existentes quedan con los tres bloques.
 
 > Para que los usuarios puedan guardar intentos y confirmaciones de la batería **Medicina Interna** (`mi`), ejecuta [`sql/migrate_add_mi_battery.sql`](sql/migrate_add_mi_battery.sql). Amplía las restricciones de `question_uid` y `battery` para aceptar las preguntas `mi-1 ... mi-500`.
+
+> Para la batería de **Endocrinología y Nutrición** (`end`), las **anotaciones por pregunta**, los **grupos de estudio** y las **confirmaciones privadas**, ejecuta [`sql/migrate_social_groups.sql`](sql/migrate_social_groups.sql). Después sube las preguntas:
+>
+> ```bash
+> SUPABASE_ACCESS_TOKEN=sbp_... node tools/seed_battery.cjs data/endocrino.json
+> ```
+>
+> El JSON de la batería está en [`data/endocrino.json`](data/endocrino.json) (500 preguntas, 8 casos clínicos).
 
 ### 1.3 Copiar las claves
 
@@ -117,18 +130,36 @@ Desde ese panel puedes:
 
 ## 2. Cómo funciona la confirmación de respuestas
 
-Cada pregunta muestra su estado:
+Las confirmaciones son **privadas**. Cada pregunta muestra su estado:
 
-- `Sin confirmar`: nadie ha validado la respuesta todavía.
-- `✓ Confirmada por N usuarios`: N usuarios han marcado la respuesta como correcta. Al pasar el ratón se ven los nombres.
-- `⚠ N en desacuerdo`: N usuarios creen que la respuesta es incorrecta.
+- `Sin confirmar`: tú todavía no has validado esa respuesta.
+- `✓ Confirmada por ti`: has marcado la respuesta como correcta.
+- `✓ Confirmada por N usuarios`: solo si perteneces a un **grupo de estudio**; son las confirmaciones de los miembros de tu grupo. Al pasar el ratón se ven los nombres.
+- `⚠ N en desacuerdo`: usuarios (tú o tu grupo) que creen que la respuesta es incorrecta.
 
 Con sesión iniciada, cada pregunta tiene dos acciones:
 
 - **Confirmar respuesta correcta**: guarda (o cambia) tu confirmación. Se puede retirar.
 - **No es correcta**: eliges la opción que crees correcta y, opcionalmente, dejas un comentario. Queda registrado como discrepancia para que el administrador lo revise.
 
-Las confirmaciones son públicas (cualquier visitante ve el estado agregado), pero solo los usuarios registrados pueden confirmar. Las políticas RLS impiden leer o modificar confirmaciones ajenas.
+Las políticas RLS impiden leer o modificar confirmaciones ajenas: solo se leen las propias y, mediante una función de base de datos con ámbito limitado, las de los miembros de tus grupos.
+
+### Anotaciones por pregunta
+
+Cada pregunta tiene un cuadro de **Mis anotaciones**:
+
+- Son **por usuario**: cada persona tiene las suyas y las demás no las ven.
+- Se guardan en Supabase con la cuenta (o en el navegador si no has iniciado sesión).
+- Si perteneces a un grupo, puedes marcar **Compartir con mi grupo** para que los miembros lo vean en **Comentarios del grupo**.
+
+### Grupos de estudio
+
+En la pantalla de inicio puedes elegir **Estudiar solo/a** o **Estudiar en grupo**:
+
+- **Crear un grupo**: pones un nombre y la app genera un **código de invitación** que se muestra al crearlo; compártelo con quien quieras.
+- **Aceptar una invitación**: la otra persona introduce el código y pasa a ser miembro.
+- Todos los miembros ven las confirmaciones y los comentarios compartidos de los demás.
+- Puedes cambiar de grupo activo o salir del grupo desde la misma pantalla o desde el botón del grupo en la cabecera.
 
 ### Qué ocurre con «No es correcta»
 
@@ -208,9 +239,12 @@ sql/schema.sql          tablas, funciones, triggers y políticas RLS
 sql/migrate_attempt_groups.sql  migración de progreso antiguo a intentos
 sql/migrate_question_overrides.sql  tabla para corregir respuestas (administradores)
 sql/migrate_add_mi_battery.sql  amplía las restricciones para la batería Medicina Interna
+sql/migrate_social_groups.sql  batería Endocrinología, notas por usuario, grupos de estudio y confirmaciones privadas
 sql/migrate_user_blocks.sql  bloques elegidos por cada usuario (perfil y cambio desde la cuenta)
 sql/migrate_delete_account.sql  función para eliminar la cuenta y todos sus datos
 sql/migrate_dataset_to_supabase.sql  tablas batteries, questions y bibliography
+data/endocrino.json     las 500 preguntas de Endocrinología y Nutrición (8 casos clínicos)
+tools/seed_battery.cjs  sube una batería (metadatos + preguntas) a Supabase
 tools/seed_supabase.cjs sube a Supabase las preguntas y la bibliografía
 bibliografia/           leyes, guías y manuales (lectores + PDF)
 bibliografia/mi/        bibliografía de Medicina Interna
@@ -226,6 +260,7 @@ La web es una herramienta de **uso personal y no comercial** para preparar la OP
 - **Correcciones:** si 5 o más usuarios discrepan de una respuesta e indican la misma opción correcta, la respuesta podrá revisarse y modificarse. Un administrador también puede corregirla desde el panel de administración. Cada cambio guarda la respuesta anterior, la nueva y la fecha, y se muestra en la pregunta afectada.
 - **Sin cuenta:** las respuestas, intentos y preferencias se guardan solo en `localStorage`, en el navegador. No se envían a ningún servidor.
 - **Con cuenta:** se guardan en Supabase el email, el nombre visible, la contraseña cifrada (la web nunca la almacena en claro), la fecha de alta, los intentos y respuestas, y las confirmaciones o correcciones con su comentario y fecha. La aceptación de estas condiciones queda registrada en los metadatos de la cuenta.
+- **Anotaciones y grupos:** las anotaciones son privadas de cada usuario; solo se comparten con el grupo si se marcan expresamente. De los grupos se guarda el nombre, el código de invitación y sus miembros. Las confirmaciones solo las ve el propio usuario y los miembros de sus grupos.
 - **Akatsak:** el ranking de fallos es privado; solo se ven los datos propios del usuario con sesión iniciada.
 - **Servicios:** GitHub Pages (alojamiento) y Supabase (autenticación y base de datos). Sin cookies publicitarias ni analítica de terceros.
 - **Conservación:** los datos se mantienen mientras se use la web para preparar la OPE. **Una vez finalizada la OPE se borrarán todos los datos** (cuentas, intentos y confirmaciones).

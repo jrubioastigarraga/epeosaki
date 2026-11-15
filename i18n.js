@@ -253,6 +253,25 @@
     "INF Enfermedades Infecciosas · 500 preguntas": "INF Gaixotasun infekziosoak · 500 galdera",
     "Medicina Interna · 500 preguntas": "Barne medikuntza · 500 galdera",
     "Usuarios": "Erabiltzaileak",
+
+    "Endocrinología y Nutrición": "Endokrinologia eta Nutrizioa",
+    "Endocrinología y Nutrición · 500 preguntas": "Endokrinologia eta nutrizioa · 500 galdera",
+    "END 500": "END 500",
+    "Endocrinología y Nutrición · 500 preguntas": "Endokrinologia eta Nutrizioa · 500 galdera",
+    "Estudiar solo/a": "Bakarrik ikasi",
+    "Estudiar en grupo": "Taldean ikasi",
+    "Mis anotaciones": "Nire oharrak",
+    "Sin anotaciones": "Oharrik ez",
+    "Guardadas": "Gordeta",
+    "Compartir con mi grupo": "Nire taldearekin partekatu",
+    "Comentarios del grupo": "Taldearen iruzkinak",
+    "Crea un grupo y comparte su código de invitación. Los miembros del grupo veis juntos vuestras confirmaciones y los comentarios que decidáis compartir. Cada persona mantiene sus propias anotaciones privadas.": "Sortu talde bat eta partekatu bere gonbidapen-kodea. Taldekideek elkarrekin ikusten dituzue berrespenak eta partekatzea erabakitzen dituzuen iruzkinak. Bakoitzak bere ohar pribatuak mantentzen ditu.",
+    "Crear un grupo": "Taldea sortu",
+    "Crear grupo": "Taldea sortu",
+    "Aceptar una invitación": "Gonbidapena onartu",
+    "Unirme": "Batu",
+    "Salir del grupo": "Taldea utzi",
+    "Empezar a practicar": "Hasita praktikatu",
   };
 
   var RULES = [
