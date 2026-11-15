@@ -39,6 +39,18 @@ alter table public.profiles
   add constraint profiles_blocks_check
   check (blocks <@ array['comun', 'fem', 'mi', 'end']::text[]);
 
+-- Metadatos de baterías: permitir la batería nueva.
+alter table if exists public.batteries drop constraint if exists batteries_id_check;
+alter table if exists public.batteries
+  add constraint batteries_id_check
+  check (id in ('comun', 'fem', 'mi', 'end'));
+
+-- Preguntas de la batería nueva.
+alter table if exists public.questions drop constraint if exists questions_uid_check;
+alter table if exists public.questions
+  add constraint questions_uid_check
+  check (uid ~ '^(comun|fem|mi|end)-[0-9]{1,3}$');
+
 create or replace function public.set_my_blocks(p_blocks text[])
 returns text[]
 language plpgsql

@@ -86,7 +86,7 @@ async function runSql(query) {
 (async () => {
   await runSql(`
 insert into public.batteries (id, meta)
-values (${literal(battery)}::text, ${literal(data.meta || {})}::jsonb)
+values ('${battery}'::text, ${literal(data.meta || {})}::jsonb)
 on conflict (id) do update set meta = excluded.meta, updated_at = now();
 `);
   console.log('Batería: ' + battery);
