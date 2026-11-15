@@ -279,6 +279,15 @@
     "Unirme": "Batu",
     "Salir del grupo": "Taldea utzi",
     "Empezar a practicar": "Hasita praktikatu",
+    "Accesos": "Sarrerak",
+    "Accesos totales": "Sarrera guztiak",
+    "Hoy": "Gaur",
+    "Últimos 7 días": "Azken 7 egunak",
+    "Últimos 30 días": "Azken 30 egunak",
+    "Usuarios registrados": "Erregistratutako erabiltzaileak",
+    "Últimos 14 días": "Azken 14 egunak",
+    "Páginas más vistas (7 días)": "Gehien ikusitako orriak (7 egun)",
+    "Página": "Orria",
   };
 
   var RULES = [

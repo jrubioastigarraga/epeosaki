@@ -23,6 +23,7 @@ Además, la aplicación se conecta a **Supabase** para tener:
 - **Akatsak**: ranking con tus propios fallos (requiere iniciar sesión).
 - **Baremo**: calculadora de méritos del Anexo III de la Resolución 1679/2026 (médico/a familia-EAP, BOPV 30-10-2026); se guarda en el navegador.
 - Panel de administración en el menú lateral para gestionar roles, revisar/eliminar confirmaciones y corregir la respuesta correcta desde las discrepancias.
+- **Accesos**: contador propio de visitas (sin cookies ni terceros) con resumen por días y páginas más vistas en **Administración → Accesos**.
 - Sincronización del progreso entre dispositivos (si se inicia sesión).
 
 ---
@@ -75,6 +76,8 @@ Además, la aplicación se conecta a **Supabase** para tener:
 > ```
 >
 > El JSON de la batería está en [`data/endocrino.json`](data/endocrino.json) (500 preguntas, 8 casos clínicos).
+
+> Para ver los **accesos** a la web desde **Administración → Accesos**, ejecuta [`sql/migrate_analytics.sql`](sql/migrate_analytics.sql). Es un contador propio: sin cookies, sin terceros y sin IP; solo guarda la página, un identificador aleatorio del navegador y la fecha.
 
 ### 1.3 Copiar las claves
 
@@ -240,6 +243,7 @@ sql/migrate_attempt_groups.sql  migración de progreso antiguo a intentos
 sql/migrate_question_overrides.sql  tabla para corregir respuestas (administradores)
 sql/migrate_add_mi_battery.sql  amplía las restricciones para la batería Medicina Interna
 sql/migrate_social_groups.sql  batería Endocrinología, notas por usuario, grupos de estudio y confirmaciones privadas
+sql/migrate_analytics.sql  contador de accesos propio (sin cookies ni terceros)
 sql/migrate_user_blocks.sql  bloques elegidos por cada usuario (perfil y cambio desde la cuenta)
 sql/migrate_delete_account.sql  función para eliminar la cuenta y todos sus datos
 sql/migrate_dataset_to_supabase.sql  tablas batteries, questions y bibliography
@@ -263,6 +267,7 @@ La web es una herramienta de **uso personal y no comercial** para preparar la OP
 - **Anotaciones y grupos:** las anotaciones son privadas de cada usuario; solo se comparten con el grupo si se marcan expresamente. De los grupos se guarda el nombre, el código de invitación y sus miembros. Las confirmaciones solo las ve el propio usuario y los miembros de sus grupos.
 - **Akatsak:** el ranking de fallos es privado; solo se ven los datos propios del usuario con sesión iniciada.
 - **Servicios:** GitHub Pages (alojamiento) y Supabase (autenticación y base de datos). Sin cookies publicitarias ni analítica de terceros.
+- **Accesos:** la web cuenta sus propias visitas en Supabase (`page_views`): solo guarda la página, un identificador aleatorio del navegador y la fecha. No usa cookies, no guarda IP, user-agent ni referrer y no comparte datos con terceros. El resumen solo lo ve el administrador en **Administración → Accesos**.
 - **Conservación:** los datos se mantienen mientras se use la web para preparar la OPE. **Una vez finalizada la OPE se borrarán todos los datos** (cuentas, intentos y confirmaciones).
 - **Eliminar la cuenta:** en cualquier momento, desde el menú de usuario (**Eliminar cuenta y datos**). **Se borrará toda la información**: cuenta y email, intentos y respuestas, y confirmaciones y correcciones. El borrado es inmediato e irreversible.
 

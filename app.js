@@ -481,6 +481,7 @@
     try {
       ensureSB();
       if (!SB) throw new Error('No se pudo crear el cliente de Supabase');
+      trackPage(state.page);
       const remoteP = loadRemoteDataset();
       const overP = loadQuestionOverrides();
       const sessP = SB.auth.getSession();
@@ -1018,6 +1019,7 @@
     state.view = 'q';
     state.caseId = null;
     applyBatteryUI(bat);
+    trackPage('preguntas');
     const arr = poolUnits();
     if (arr.length) goUnit(arr[0]);
     else { state.uid = state.bat + '-1'; renderAll(false); }
@@ -1343,6 +1345,36 @@
     } finally {
       btn.disabled = false;
     }
+  }
+
+  // ============================================================
+  //  Analítica propia (sin cookies ni terceros)
+  // ============================================================
+  function visitorId() {
+    try {
+      let v = localStorage.getItem('ope-visitor');
+      if (!v) {
+        v = (window.crypto && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : 'v-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+        localStorage.setItem('ope-visitor', v);
+      }
+      return v;
+    } catch (e) { return 'anonimo'; }
+  }
+
+  let lastTrack = { path: '', ts: 0 };
+  function trackPage(page) {
+    if (!SB) return;
+    const p = page === 'preguntas' ? 'preguntas/' + state.bat : String(page || 'inicio');
+    const now = Date.now();
+    if (lastTrack.path === p && now - lastTrack.ts < 10000) return;
+    lastTrack = { path: p, ts: now };
+    try {
+      SB.rpc('log_page_view', { p_path: p, p_visitor: visitorId() })
+        .then(r => { if (r && r.error) console.warn('[analitica]', r.error.message); })
+        .catch(() => { /* sin analítica */ });
+    } catch (e) { /* la web sigue funcionando */ }
   }
 
   // ============================================================
@@ -2102,6 +2134,7 @@
     else if (page === 'admin') openAdmin();
     else if (page === 'inicio') renderHome();
     else if (opts.render !== false) renderAll(false);
+    trackPage(page);
   }
 
   // ============================================================
@@ -2251,6 +2284,42 @@
           if (session && id === session.user.id) { await loadProfile(); renderAuthUI(); }
         };
       });
+    } else if (adminTab === 'stats') {
+      const { data, error } = await SB.rpc('admin_analytics');
+      if (error) { body.innerHTML = `<div class="empty">Error: ${esc(error.message)}</div>`; return; }
+      if (!data) { body.innerHTML = '<div class="empty">No tienes permiso para ver la analítica.</div>'; return; }
+      const a = data || {};
+      const daily = Array.isArray(a.daily) ? a.daily : [];
+      const top = Array.isArray(a.top) ? a.top : [];
+      const max = Math.max(1, ...daily.map(d => Number(d.views) || 0));
+      const cards = [
+        ['Accesos totales', a.total],
+        ['Hoy', a.views_today + ' accesos · ' + a.visitors_today + ' visitantes'],
+        ['Últimos 7 días', a.views_7 + ' accesos · ' + a.visitors_7 + ' visitantes'],
+        ['Últimos 30 días', a.views_30 + ' accesos · ' + a.visitors_30 + ' visitantes'],
+        ['Usuarios registrados', a.users]
+      ];
+      body.innerHTML = `
+        <div class="an-grid">${cards.map(([label, value]) =>
+          `<div class="an-card"><span>${esc(label)}</span><b>${esc(String(value == null ? '—' : value))}</b></div>`
+        ).join('')}</div>
+        <h3 class="an-title">Últimos 14 días</h3>
+        <div class="an-days">${daily.length ? daily.map(d => {
+          const pct = Math.max(2, Math.round((Number(d.views) || 0) * 100 / max));
+          const dt = new Date(d.day + 'T00:00:00');
+          const label = dt.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+          return `<div class="an-day"><span class="an-date">${label}</span>
+            <span class="an-bar"><i style="width:${pct}%"></i></span>
+            <b>${Number(d.views) || 0}</b><small>${Number(d.visitors) || 0} visit.</small></div>`;
+        }).join('') : '<div class="empty">Todavía no hay datos.</div>'}</div>
+        <h3 class="an-title">Páginas más vistas (7 días)</h3>
+        <div class="table-wrap"><table class="admin">
+          <thead><tr><th>Página</th><th>Accesos</th></tr></thead>
+          <tbody>${top.length ? top.map(t =>
+            `<tr><td>${esc(t.path)}</td><td>${Number(t.views) || 0}</td></tr>`
+          ).join('') : '<tr><td colspan="2" class="empty-row">Sin datos</td></tr>'}</tbody>
+        </table></div>
+        <p class="stats-note">Sin cookies ni terceros: solo se guarda la página, un identificador aleatorio del navegador y la fecha. No se guardan IP, user-agent ni referrer.</p>`;
     } else {
       const confRes = await SB.from('confirmations')
         .select('id,question_uid,is_correct,suggested_answer,comment,created_at')
