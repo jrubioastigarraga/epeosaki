@@ -32,6 +32,50 @@
     "Fallos:": "Akatsak:",
     "Administración": "Administrazioa",
     "Panel de administración": "Administrazio panela",
+    "Propuestas": "Proposamenak",
+    "Propón mejoras o comunica fallos. El administrador responderá aquí mismo.": "Proposatu hobekuntzak edo jakinarazi akatsak. Administratzaileak hemen bertan erantzungo du.",
+    "Inicia sesión para enviar una propuesta o comunicar un fallo.": "Hasi saioa proposamen bat bidaltzeko edo akats bat jakinarazteko.",
+    "Tipo": "Mota",
+    "Propuesta": "Proposamena",
+    "Respuesta": "Erantzuna",
+    "Mejora": "Hobekuntza",
+    "Fallo": "Akatsa",
+    "Título": "Izenburua",
+    "Resumen breve": "Laburpen laburra",
+    "Página o pregunta (opcional)": "Orria edo galdera (aukerakoa)",
+    "Descripción": "Deskribapena",
+    "Enviar propuesta": "Proposamena bidali",
+    "Actualizar": "Eguneratu",
+    "Mis propuestas": "Nire proposamenak",
+    "Ver todas en Administración": "Ikusi guztiak Administrazioan",
+    "Todavía no has enviado ninguna propuesta.": "Oraindik ez duzu proposamenik bidali.",
+    "Respondida": "Erantzunda",
+    "Respuesta del administrador": "Administratzailearen erantzuna",
+    "Propuesta enviada": "Proposamena bidalita",
+    "Propuesta enviada. El administrador podrá responderte aquí.": "Proposamena bidalita. Administratzaileak hemen erantzun ahal izango dizu.",
+    "Propuesta eliminada": "Proposamena ezabatuta",
+    "Eliminar propuesta": "Proposamena ezabatu",
+    "Responder": "Erantzun",
+    "Respondidas": "Erantzunak",
+    "Actualizar respuesta": "Erantzuna eguneratu",
+    "Marcar pendiente": "Zain gisa markatu",
+    "Marcar como pendiente": "Zain gisa markatu",
+    "Se borrará la respuesta actual y la propuesta volverá a la lista de pendientes. ¿Continuar?": "Uneko erantzuna ezabatuko da eta proposamena zain dauden zerrendara itzuliko da. Jarraitu?",
+    "No hay propuestas pendientes": "Ez dago proposamen zainik",
+    "No hay propuestas respondidas": "Ez dago proposamen erantzunik",
+    "Todavía no hay propuestas": "Oraindik ez dago proposamenik",
+    "Las propuestas necesitan Supabase configurado.": "Proposamenek Supabase konfiguratuta behar dute.",
+    "Enviando…": "Bidaltzen…",
+    "Escribe una respuesta.": "Idatzi erantzun bat.",
+    "Escribe un título y una descripción.": "Idatzi izenburu bat eta deskribapen bat.",
+    "No se pudo enviar: Supabase no está disponible.": "Ezin izan da bidali: Supabase ez dago erabilgarri.",
+    "Respuesta guardada": "Erantzuna gordeta",
+    "Propuesta marcada como pendiente": "Proposamena zain gisa markatuta",
+    "Fecha": "Data",
+    "Los usuarios envían mejoras y avisos de fallos desde Propuestas. Al guardar una respuesta, el usuario la verá en su ficha y la propuesta quedará marcada como respondida.": "Erabiltzaileek hobekuntzak eta akatsen jakinarazpenak Proposamenak ataletik bidaltzen dituzte. Erantzun bat gordetzean, erabiltzaileak bere fitxan ikusiko du eta proposamena erantzunda gisa markatuko da.",
+    "Los usuarios envían mejoras y avisos de fallos desde ": "Erabiltzaileek hobekuntzak eta akatsen jakinarazpenak hemen bidaltzen dituzte: ",
+    "Al guardar una respuesta, el usuario la verá en su ficha y la propuesta quedará marcada como ": "Erantzun bat gordetzean, erabiltzaileak bere fitxan ikusiko du eta proposamena honela markatuko da: ",
+    "respondida": "erantzunda",
     "Iniciar sesión": "Saioa hasi",
     "Cerrar sesión": "Saioa itxi",
     "Crear cuenta": "Kontua sortu",
@@ -314,6 +358,7 @@
     [/^Pendientes \((\d+)\)$/, function (m) { return 'Zain (' + m[1] + ')'; }],
     [/^Aplicadas \((\d+)\)$/, function (m) { return 'Aplikatuta (' + m[1] + ')'; }],
     [/^Confirmaciones \((\d+)\)$/, function (m) { return 'Berrespenak (' + m[1] + ')'; }],
+    [/^Respondidas \((\d+)\)$/, function (m) { return 'Erantzunak (' + m[1] + ')'; }],
     [/^(.+) · (\d+) fallos? de (\d+) intentos?$/, function (m) { return m[1] + ' · ' + m[2] + ' huts, ' + m[3] + ' saiakeratik'; }],
     [/^(.+) · ordenado por número de fallos\. Pulsa una pregunta para abrirla\.$/, function (m) {
       return (EU[m[1]] || m[1]) + ' · hutsen kopuruaren arabera ordenatuta. Sakatu galdera bat irekitzeko.';
@@ -321,6 +366,10 @@
     [/^(\d+) resp\.$/, function (m) { return m[1] + ' erant.'; }],
     [/^No se pudo guardar: (.*)$/, function (m) { return 'Ezin izan da gorde: ' + m[1]; }],
     [/^No se pudo guardar la confirmación: (.*)$/, function (m) { return 'Ezin izan da berrespena gorde: ' + m[1]; }],
+    [/^No se pudo enviar: (.*)$/, function (m) { return 'Ezin izan da bidali: ' + m[1]; }],
+    [/^No se pudo responder: (.*)$/, function (m) { return 'Ezin izan da erantzun: ' + m[1]; }],
+    [/^No se pudo actualizar: (.*)$/, function (m) { return 'Ezin izan da eguneratu: ' + m[1]; }],
+    [/^No se pudo eliminar: (.*)$/, function (m) { return 'Ezin izan da ezabatu: ' + m[1]; }],
     [/^No se pudo eliminar la cuenta: (.*)$/, function (m) { return 'Ezin izan da kontua ezabatu: ' + m[1]; }],
     [/^No se pudo cambiar el rol: (.*)$/, function (m) { return 'Ezin izan da rola aldatu: ' + m[1]; }],
     [/^¿Cambiar la respuesta correcta de la pregunta (\d+) a «([^»]*)»\?\n\nEl cambio se aplica a todos los usuarios y recalcula sus intentos\.$/, function (m) {
@@ -341,7 +390,11 @@
     "Respuesta confirmada": "Erantzuna berretsita",
     "Menú": "Menua",
     "Abrir menú": "Menua ireki",
-    "Cerrar menú": "Menua itxi"
+    "Cerrar menú": "Menua itxi",
+    "Resumen breve": "Laburpen laburra",
+    "Ej.: pregunta 145, caso 3, baremo…": "Adib.: 145. galdera, 3. kasua, baremoa…",
+    "Cuéntanos qué mejorarías o qué ha fallado…": "Kontatu zer hobetuko zenukeen edo zer huts egin duen…",
+    "Respuesta visible para el usuario…": "Erabiltzaileak ikusiko duen erantzuna…"
   };
 
   function tr(s) {
@@ -384,8 +437,9 @@
     }
     if (node.nodeType !== 1) return;
     var tag = node.tagName;
-    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA') return;
+    if (tag === 'SCRIPT' || tag === 'STYLE') return;
     translateAttrs(node);
+    if (tag === 'TEXTAREA') return;
     for (var n = node.firstChild; n; n = n.nextSibling) translateTree(n);
   }
 

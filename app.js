@@ -313,6 +313,7 @@
   let disputeUid = null;
   let adminTab = 'users';
   let adminConfFilter = 'all';
+  let adminProposalFilter = 'pending';
   let statsBat = 'all';
 
   function toast(msg, type) {
@@ -530,6 +531,7 @@
       renderGroupChip();
       renderHomeGroup();
       renderAll(false);
+      if (state.page === 'propuestas') openProposals();
       if (location.hash === '#/admin') routeFromHash();
       return;
     }
@@ -540,6 +542,7 @@
     renderGroupChip();
     renderHomeGroup();
     renderAll(false);
+    if (state.page === 'propuestas') openProposals();
     if (location.hash === '#/admin') routeFromHash();
   }
 
@@ -1946,7 +1949,7 @@
   // ============================================================
   //  Páginas, menú lateral y migas de pan
   // ============================================================
-  const PAGES = ['inicio', 'preguntas', 'bibliografia', 'ranking', 'baremo', 'admin'];
+  const PAGES = ['inicio', 'preguntas', 'bibliografia', 'ranking', 'baremo', 'propuestas', 'admin'];
 
   function renderHome() {
     $('#homeBats').innerHTML = BAT_KEYS.map(k => {
@@ -2075,6 +2078,8 @@
       html += sep + '<span aria-current="page">Fallos</span>';
     } else if (state.page === 'baremo') {
       html += sep + '<span aria-current="page">Baremo</span>';
+    } else if (state.page === 'propuestas') {
+      html += sep + '<span aria-current="page">Propuestas</span>';
     } else if (state.page === 'admin') {
       html += sep + '<span aria-current="page">Administración</span>';
     } else {
@@ -2112,6 +2117,7 @@
     $('#pageRanking').hidden = page !== 'ranking';
     $('#pageBaremo').hidden = page !== 'baremo';
     if (page === 'baremo') renderBaremo();
+    $('#pageProposals').hidden = page !== 'propuestas';
     $('#pageAdmin').hidden = page !== 'admin';
     $('#asideQuestions').hidden = !onQuestions;
     document.querySelectorAll('.mm-item').forEach(b => {
@@ -2131,7 +2137,8 @@
     }
     if (page === 'bibliografia') renderBib($('#bibSearch').value || '');
     else if (page === 'ranking') openStats();
-    else if (page === 'admin') openAdmin();
+    else if (page === 'propuestas') openProposals();
+    else if (page === 'admin') openAdmin(opts.adminTab);
     else if (page === 'inicio') renderHome();
     else if (opts.render !== false) renderAll(false);
     trackPage(page);
@@ -2235,13 +2242,267 @@
   }
 
   // ============================================================
+  //  Propuestas de mejora y avisos de fallos
+  // ============================================================
+  function proposalKindTag(kind) {
+    return kind === 'fallo'
+      ? '<span class="tag conf-bad">Fallo</span>'
+      : '<span class="tag conf-me">Mejora</span>';
+  }
+
+  function proposalStatusTag(status) {
+    return status === 'answered'
+      ? '<span class="tag conf-ok">Respondida</span>'
+      : '<span class="tag conf-mid">Pendiente</span>';
+  }
+
+  function openProposals() {
+    const form = $('#proposalForm');
+    const login = $('#proposalLogin');
+    const list = $('#proposalsList');
+    const listHead = $('#proposalListHead');
+    const adminBtn = $('#proposalAdminBtn');
+    if (!form || !list) return;
+    if (!HAS_CONFIG) {
+      form.hidden = true;
+      login.hidden = true;
+      listHead.hidden = true;
+      adminBtn.hidden = true;
+      list.innerHTML = '<div class="empty">Las propuestas necesitan Supabase configurado.</div>';
+      return;
+    }
+    if (!session) {
+      form.hidden = true;
+      login.hidden = false;
+      listHead.hidden = true;
+      adminBtn.hidden = true;
+      list.innerHTML = '';
+      $('#proposalLoginBtn').onclick = () => openAuth('login');
+      return;
+    }
+    form.hidden = false;
+    login.hidden = true;
+    listHead.hidden = false;
+    adminBtn.hidden = !canAdmin();
+    adminBtn.onclick = () => setPage('admin', { push: true, adminTab: 'proposals' });
+    loadMyProposals();
+  }
+
+  async function loadMyProposals() {
+    const list = $('#proposalsList');
+    if (!list || !SB || !session) return;
+    list.innerHTML = '<div class="empty">Cargando&hellip;</div>';
+    const { data, error } = await SB.from('proposals')
+      .select('id,kind,title,body,context,status,admin_reply,replied_at,created_at')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false });
+    if (error) {
+      list.innerHTML = `<div class="empty">Error: ${esc(error.message)}</div>`;
+      return;
+    }
+    if (!data || !data.length) {
+      list.innerHTML = '<div class="empty">Todavía no has enviado ninguna propuesta.</div>';
+      return;
+    }
+    list.innerHTML = data.map(p => {
+      const ctx = p.context ? ' · ' + esc(p.context) : '';
+      const reply = p.admin_reply
+        ? `<div class="proposal-reply">
+             <b>Respuesta del administrador</b>
+             <p>${esc(p.admin_reply)}</p>
+             ${p.replied_at ? `<div class="proposal-meta">${fmtDate(p.replied_at)}</div>` : ''}
+           </div>`
+        : '';
+      return `<article class="proposal-item">
+        <div class="proposal-item-head">
+          <div>${proposalKindTag(p.kind)} <b>${esc(p.title)}</b>
+            <div class="proposal-meta">${fmtDate(p.created_at)}${ctx}</div>
+          </div>
+          ${proposalStatusTag(p.status)}
+        </div>
+        <p class="proposal-text">${esc(p.body)}</p>
+        ${reply}
+        <div class="proposal-item-foot">
+          <button class="btn" type="button" data-del-proposal="${p.id}">Eliminar</button>
+        </div>
+      </article>`;
+    }).join('');
+    list.querySelectorAll('[data-del-proposal]').forEach(b => {
+      b.onclick = async () => {
+        const ok = await openAsk({ title: 'Eliminar propuesta', text: '¿Eliminar esta propuesta?', okText: 'Eliminar', danger: true });
+        if (!ok) return;
+        const { error: e } = await SB.from('proposals').delete().eq('id', b.dataset.delProposal);
+        if (e) { toast('No se pudo eliminar: ' + e.message, 'err'); return; }
+        toast('Propuesta eliminada', 'ok');
+        loadMyProposals();
+      };
+    });
+  }
+
+  async function submitProposal(e) {
+    if (e) e.preventDefault();
+    if (!session) return openAuth('login');
+    if (!SB) return toast('No se pudo enviar: Supabase no está disponible.', 'err');
+    const kind = $('#proposalKind').value;
+    const title = $('#proposalTitle').value.trim();
+    const context = $('#proposalContext').value.trim();
+    const body = $('#proposalBody').value.trim();
+    if (!title || !body) return toast('Escribe un título y una descripción.', 'err');
+    const btn = $('#proposalSubmit');
+    const msg = $('#proposalMsg');
+    btn.disabled = true;
+    msg.textContent = 'Enviando…';
+    const { error } = await SB.from('proposals').insert({
+      user_id: session.user.id,
+      kind,
+      title,
+      body,
+      context: context || null
+    });
+    btn.disabled = false;
+    if (error) {
+      msg.textContent = '';
+      toast('No se pudo enviar: ' + error.message, 'err');
+      return;
+    }
+    $('#proposalTitle').value = '';
+    $('#proposalContext').value = '';
+    $('#proposalBody').value = '';
+    msg.textContent = 'Propuesta enviada. El administrador podrá responderte aquí.';
+    toast('Propuesta enviada', 'ok');
+    await loadMyProposals();
+  }
+
+  async function renderAdminProposals(body) {
+    if (!SB) return;
+    const { data, error } = await SB.from('proposals')
+      .select('id,user_id,kind,title,body,context,status,admin_reply,replied_by,replied_at,created_at')
+      .order('created_at', { ascending: false })
+      .limit(1000);
+    if (error) {
+      body.innerHTML = `<div class="empty">Error: ${esc(error.message)}</div>`;
+      return;
+    }
+    const all = data || [];
+    const users = {};
+    const ids = [...new Set(all.map(p => p.user_id).concat(all.map(p => p.replied_by).filter(Boolean)))];
+    if (ids.length) {
+      const { data: profs } = await SB.from('profiles').select('id,email,display_name').in('id', ids);
+      for (const p of profs || []) users[p.id] = p;
+    }
+    const pend = all.filter(p => p.status === 'pending').length;
+    const ans = all.filter(p => p.status === 'answered').length;
+    const filtered = adminProposalFilter === 'pending'
+      ? all.filter(p => p.status === 'pending')
+      : adminProposalFilter === 'answered'
+        ? all.filter(p => p.status === 'answered')
+        : all;
+    filtered.sort((a, b) => {
+      const pa = a.status === 'pending' ? 0 : 1;
+      const pb = b.status === 'pending' ? 0 : 1;
+      return pa - pb || String(b.created_at).localeCompare(String(a.created_at));
+    });
+    const rows = filtered.map(p => {
+      const u = users[p.user_id] || {};
+      const who = u.display_name || u.email || p.user_id;
+      const replyEditor = `<div class="proposal-admin-reply">
+        <textarea data-reply-text="${p.id}" rows="3" maxlength="2000" placeholder="Respuesta visible para el usuario…">${esc(p.admin_reply || '')}</textarea>
+        <button class="btn primary" type="button" data-reply-proposal="${p.id}">${p.status === 'answered' ? 'Actualizar respuesta' : 'Responder'}</button>
+        ${p.replied_at ? `<div class="admin-sub">${fmtDate(p.replied_at)}</div>` : ''}
+      </div>`;
+      return `<tr${p.status === 'pending' ? ' class="row-pending"' : ''}>
+        <td><div class="admin-name">${esc(who)}</div><div class="admin-sub">${esc(u.email || '')}</div></td>
+        <td>${proposalKindTag(p.kind)}</td>
+        <td>
+          <div class="admin-name">${esc(p.title)}</div>
+          <div class="proposal-admin-text">${esc(p.body)}</div>
+          ${p.context ? `<div class="admin-sub">${esc(p.context)}</div>` : ''}
+        </td>
+        <td>${proposalStatusTag(p.status)}</td>
+        <td>${replyEditor}</td>
+        <td>${fmtDate(p.created_at)}</td>
+        <td><div class="admin-actions">
+          ${p.status === 'answered' ? `<button class="btn" type="button" data-reopen-proposal="${p.id}">Marcar pendiente</button>` : ''}
+          <button class="btn" type="button" data-del-proposal-admin="${p.id}">Eliminar</button>
+        </div></td>
+      </tr>`;
+    }).join('');
+    const emptyMsg = adminProposalFilter === 'pending'
+      ? 'No hay propuestas pendientes'
+      : adminProposalFilter === 'answered'
+        ? 'No hay propuestas respondidas'
+        : 'Todavía no hay propuestas';
+    body.innerHTML = `<div class="stats-note">Los usuarios envían mejoras y avisos de fallos desde <b>Propuestas</b>. Al guardar una respuesta, el usuario la verá en su ficha y la propuesta quedará marcada como <b>respondida</b>.</div>
+      <div class="admin-filter">
+        <button class="tab${adminProposalFilter === 'pending' ? ' on' : ''}" type="button" data-proposal-filter="pending">Pendientes (${pend})</button>
+        <button class="tab${adminProposalFilter === 'answered' ? ' on' : ''}" type="button" data-proposal-filter="answered">Respondidas (${ans})</button>
+        <button class="tab${adminProposalFilter === 'all' ? ' on' : ''}" type="button" data-proposal-filter="all">Todas (${all.length})</button>
+      </div>
+      <div class="table-wrap"><table class="admin">
+        <thead><tr><th>Usuario</th><th>Tipo</th><th>Propuesta</th><th>Estado</th><th>Respuesta</th><th>Fecha</th><th></th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="7" class="empty-row">${emptyMsg}</td></tr>`}</tbody>
+      </table></div>`;
+    body.querySelectorAll('[data-proposal-filter]').forEach(b => {
+      b.onclick = () => {
+        adminProposalFilter = b.dataset.proposalFilter;
+        renderAdminProposals(body);
+      };
+    });
+    body.querySelectorAll('[data-reply-proposal]').forEach(b => {
+      b.onclick = async () => {
+        const id = b.dataset.replyProposal;
+        const ta = body.querySelector(`textarea[data-reply-text="${id}"]`);
+        const text = ta ? ta.value.trim() : '';
+        if (!text) return toast('Escribe una respuesta.', 'err');
+        b.disabled = true;
+        const { error: e } = await SB.from('proposals').update({
+          admin_reply: text,
+          status: 'answered',
+          replied_by: session.user.id,
+          replied_at: new Date().toISOString()
+        }).eq('id', id);
+        b.disabled = false;
+        if (e) { toast('No se pudo responder: ' + e.message, 'err'); return; }
+        toast('Respuesta guardada', 'ok');
+        renderAdminProposals(body);
+      };
+    });
+    body.querySelectorAll('[data-reopen-proposal]').forEach(b => {
+      b.onclick = async () => {
+        const ok = await openAsk({ title: 'Marcar como pendiente', text: 'Se borrará la respuesta actual y la propuesta volverá a la lista de pendientes. ¿Continuar?', okText: 'Marcar pendiente' });
+        if (!ok) return;
+        const { error: e } = await SB.from('proposals').update({
+          admin_reply: null,
+          status: 'pending',
+          replied_by: null,
+          replied_at: null
+        }).eq('id', b.dataset.reopenProposal);
+        if (e) { toast('No se pudo actualizar: ' + e.message, 'err'); return; }
+        toast('Propuesta marcada como pendiente', 'ok');
+        renderAdminProposals(body);
+      };
+    });
+    body.querySelectorAll('[data-del-proposal-admin]').forEach(b => {
+      b.onclick = async () => {
+        const ok = await openAsk({ title: 'Eliminar propuesta', text: '¿Eliminar esta propuesta?', okText: 'Eliminar', danger: true });
+        if (!ok) return;
+        const { error: e } = await SB.from('proposals').delete().eq('id', b.dataset.delProposalAdmin);
+        if (e) { toast('No se pudo eliminar: ' + e.message, 'err'); return; }
+        toast('Propuesta eliminada', 'ok');
+        renderAdminProposals(body);
+      };
+    });
+  }
+
+  // ============================================================
   //  Administración
   // ============================================================
-  async function openAdmin() {
+  async function openAdmin(tab) {
     if (!canAdmin()) return;
-    adminTab = 'users';
+    adminTab = tab || 'users';
     adminConfFilter = 'all';
-    document.querySelectorAll('[data-admin]').forEach(t => t.classList.toggle('on', t.dataset.admin === 'users'));
+    adminProposalFilter = 'pending';
+    document.querySelectorAll('[data-admin]').forEach(t => t.classList.toggle('on', t.dataset.admin === adminTab));
     await renderAdmin();
   }
 
@@ -2320,6 +2581,8 @@
           ).join('') : '<tr><td colspan="2" class="empty-row">Sin datos</td></tr>'}</tbody>
         </table></div>
         <p class="stats-note">Sin cookies ni terceros: solo se guarda la página, un identificador aleatorio del navegador y la fecha. No se guardan IP, user-agent ni referrer.</p>`;
+    } else if (adminTab === 'proposals') {
+      await renderAdminProposals(body);
     } else {
       const confRes = await SB.from('confirmations')
         .select('id,question_uid,is_correct,suggested_answer,comment,created_at')
@@ -2885,6 +3148,10 @@
   bind('#disputeCancel', 'click', () => $('#disputeModal').classList.remove('open'));
   bind('#disputeSubmit', 'click', submitDispute);
   bind('#disputeModal', 'click', (e) => { if (e.target.id === 'disputeModal') $('#disputeModal').classList.remove('open'); });
+
+  // Propuestas
+  $('#proposalForm').onsubmit = submitProposal;
+  $('#proposalRefresh').onclick = () => loadMyProposals();
 
   // Administración (página normal dentro de la app)
   document.querySelectorAll('[data-admin]').forEach(t => {

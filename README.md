@@ -22,7 +22,8 @@ Además, la aplicación se conecta a **Supabase** para tener:
 - **Intentos agrupados**: cada intento guarda las preguntas que hayas respondido, aunque no completes todas. Puedes revisar cualquier intento pasado desde el selector de la barra lateral.
 - **Akatsak**: ranking con tus propios fallos (requiere iniciar sesión).
 - **Baremo**: calculadora de méritos del Anexo III de la Resolución 1679/2026 (médico/a familia-EAP, BOPV 30-10-2026); se guarda en el navegador.
-- Panel de administración en el menú lateral para gestionar roles, revisar/eliminar confirmaciones y corregir la respuesta correcta desde las discrepancias.
+- **Propuestas**: página para proponer mejoras o comunicar fallos. Cada usuario ve sus propuestas y la respuesta del administrador.
+- Panel de administración en el menú lateral para gestionar roles, revisar/eliminar confirmaciones, corregir la respuesta correcta desde las discrepancias y **responder las propuestas**.
 - **Accesos**: contador propio de visitas (sin cookies ni terceros) con resumen por días y páginas más vistas en **Administración → Accesos**.
 - Sincronización del progreso entre dispositivos (si se inicia sesión).
 
@@ -43,6 +44,7 @@ Además, la aplicación se conecta a **Supabase** para tener:
 4. Debe terminar sin errores. Se crean:
    - `profiles`: perfil y rol (`user` / `admin`) de cada usuario.
    - `confirmations`: confirmaciones y discrepancias de respuestas.
+   - `proposals`: propuestas de mejora y avisos de fallos, con la respuesta del administrador.
    - `attempt_groups`: cada intento (puede quedar incompleto).
    - `attempts`: respuestas de cada intento.
    - `question_overrides`: respuestas correctas corregidas por administradores.
@@ -78,6 +80,8 @@ Además, la aplicación se conecta a **Supabase** para tener:
 > El JSON de la batería está en [`data/endocrino.json`](data/endocrino.json) (500 preguntas, 8 casos clínicos).
 
 > Para ver los **accesos** a la web desde **Administración → Accesos**, ejecuta [`sql/migrate_analytics.sql`](sql/migrate_analytics.sql). Es un contador propio: sin cookies, sin terceros y sin IP; solo guarda la página, un identificador aleatorio del navegador y la fecha.
+
+> Para activar la página **Propuestas** y que el administrador pueda responder, ejecuta [`sql/migrate_proposals.sql`](sql/migrate_proposals.sql). Crea la tabla `proposals` y sus políticas RLS. Si ya habías ejecutado `sql/schema.sql`, basta con esta migración.
 
 ### 1.3 Copiar las claves
 
@@ -128,6 +132,7 @@ Desde ese panel puedes:
 - Ver todas las confirmaciones y discrepancias, con el usuario, la opción propuesta y el comentario.
 - Eliminar confirmaciones.
 - **Cambiar la respuesta correcta** de una pregunta desde una discrepancia: elige la opción en la columna **Corregir** y pulsa **Aplicar**. El cambio se guarda para todos los usuarios y recalcula los intentos ya registrados.
+- **Ver y responder las propuestas** de mejora y los avisos de fallos desde la pestaña **Propuestas**. La respuesta queda visible para el usuario que la envió.
 
 ---
 
@@ -232,7 +237,7 @@ GitHub Pages sirve el contenido de la rama configurada (normalmente `main` / ra�
 ## 6. Estructura
 
 ```
-index.html              aplicación en una sola página con rutas internas (Inicio, Preguntas, Bibliografía, Akatsak)
+index.html              aplicación en una sola página con rutas internas (Inicio, Preguntas, Bibliografía, Akatsak, Propuestas)
 i18n.js                  traducción al euskera de la interfaz (no traduce las preguntas ni la bibliografía); el botón "Euskara" de la cabecera cambia el idioma
 app.js                  lógica de la aplicación (casos, usuarios, confirmaciones)
 config.js               URL y clave anon de Supabase
@@ -245,6 +250,7 @@ sql/migrate_add_mi_battery.sql  amplía las restricciones para la batería Medic
 sql/migrate_social_groups.sql  batería Endocrinología, notas por usuario, grupos de estudio y confirmaciones privadas
 sql/migrate_analytics.sql  contador de accesos propio (sin cookies ni terceros)
 sql/migrate_user_blocks.sql  bloques elegidos por cada usuario (perfil y cambio desde la cuenta)
+sql/migrate_proposals.sql  propuestas de mejora y avisos de fallos con respuesta del administrador
 sql/migrate_delete_account.sql  función para eliminar la cuenta y todos sus datos
 sql/migrate_dataset_to_supabase.sql  tablas batteries, questions y bibliography
 data/endocrino.json     las 500 preguntas de Endocrinología y Nutrición (8 casos clínicos)
